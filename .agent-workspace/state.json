@@ -1,0 +1,63 @@
+{
+  "cycle": 2,
+  "phase": "accepted",
+  "eps": {
+    "ep05": { "status": "accepted", "description": "Agent Loop（MockPlanner + 工具调用）" },
+    "ep06": { "status": "accepted", "description": "多 Agent 协作（消息总线 + Agent 注册中心）" },
+    "ep07": { "status": "accepted", "description": "LLM Planner（真实 ReAct 循环，OpenAI-compatible）", "qaStatus": "qa-done" }
+  },
+  "issues": [
+    { "id": "ISSUE-001", "status": "fixed", "fixedAt": "2026-03-14T15:08:00.000Z" },
+    { "id": "ISSUE-002", "status": "fixed", "fixedAt": "2026-03-14T15:08:00.000Z" },
+    { "id": "ISSUE-EP07-001", "status": "open", "priority": "P2", "createdAt": "2026-03-14T23:38:00.000Z", "description": "/run 路由 (agentRunner as any).registry 强制访问私有成员" }
+  ],
+  "testResults": {
+    "ep07": {
+      "method": "static-code-review",
+      "reason": "Gateway 旧版本运行中，/api/llm/* 返回 404，HTTP 测试 BLOCKED",
+      "total": 18,
+      "pass": 18,
+      "fail": 0,
+      "p0Issues": 0,
+      "p1Issues": 0,
+      "p2Issues": 1
+    }
+  },
+  "log": [
+    {
+      "timestamp": "2026-03-14T14:49:00.000Z",
+      "event": "ep05-dev-done",
+      "detail": "EP-05 Agent Loop 实现完成：tools.ts, planner.ts, runner.ts, routes/agent-loop.ts"
+    },
+    {
+      "timestamp": "2026-03-14T14:49:00.000Z",
+      "event": "ep06-dev-done",
+      "detail": "EP-06 多 Agent 协作实现完成：registry.ts, bus.ts, routes/multi-agent.ts"
+    },
+    {
+      "timestamp": "2026-03-14T15:08:00.000Z",
+      "event": "bug-fix-run1",
+      "detail": "修复 ISSUE-001（extractCodeFromTask 裸代码提取）和 ISSUE-002（广播 queue 初始化）"
+    },
+    {
+      "timestamp": "2026-03-14T15:10:00.000Z",
+      "event": "ep05-ep06-accepted",
+      "detail": "PM 验收通过：EP-05/06 核心功能全部正常，QA 32/32，2 P2 issues 已修复"
+    },
+    {
+      "timestamp": "2026-03-14T23:25:00.000Z",
+      "event": "ep07-dev-done",
+      "detail": "EP-07 LLM Planner 实现完成：llm/types.ts, llm/provider.ts, llm/planner.ts, llm/manager.ts, routes/llm.ts；UI 新增第 5 面板 LLM Planner；编译 0 错误；Gateway 待重启"
+    },
+    {
+      "timestamp": "2026-03-14T23:34:00.000Z",
+      "event": "ep07-accepted",
+      "detail": "PM 代码级验收通过：6 端点完整、503 错误处理、apiKey 安全隐藏、MockPlanner 向后兼容、UI 5 元素齐备、零新增依赖。验收报告：artifacts/acceptance-report-ep07.md"
+    },
+    {
+      "timestamp": "2026-03-14T23:38:00.000Z",
+      "event": "ep07-qa-done",
+      "detail": "QA 静态代码审查完成：18/18 通过，0 P0，0 P1，1 P2（ISSUE-EP07-001: as any 访问私有成员）。TypeScript 编译 0 新增错误。Gateway 待重启后可执行 HTTP 回归测试。"
+    }
+  ]
+}

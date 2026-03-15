@@ -1,0 +1,19 @@
+# Default Read-Only Manifest
+# 仅允许 read 操作，禁止所有写入/执行
+name: default-readonly
+version: "1.0"
+
+operations:
+  exec: false
+  network: false
+  filesystem: false
+
+network:
+  blockExternal: true
+  allowedHosts:
+    - "127.0.0.1"
+    - "localhost"
+
+filesystem:
+  readPaths: []
+  writePaths: []

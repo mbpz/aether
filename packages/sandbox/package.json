@@ -1,0 +1,22 @@
+{
+  "name": "@aether/sandbox",
+  "version": "0.1.0",
+  "description": "Aether WASM Sandbox Execution Layer",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "node --import tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "isolated-vm": "^4.7.2",
+    "uuid": "^9.0.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.7",
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

@@ -1,0 +1,130 @@
+// Aether Gateway Server - HTTP + WebSocket
+import express, { Request, Response, NextFunction } from 'express';
+import { createServer } from 'http';
+import { WebSocketServer } from 'ws';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { AuditLogger } from './audit/logger.js';
+import { ManifestEngine } from './manifest/engine.js';
+import { VaultInjector } from './vault/injector.js';
+import { TaskQueue } from './sandbox/task-queue.js';
+import { SandboxBridge } from './sandbox/bridge.js';
+import { MemoryManager } from './memory/manager.js';
+import { AgentRunner } from './agent-loop/runner.js';
+import { AgentRegistry } from './multi-agent/registry.js';
+import { MessageBus } from './multi-agent/bus.js';
+import { LLMManager } from './llm/manager.js';
+import { createAgentRouter } from './routes/agent.js';
+import { createStatusRouter } from './routes/status.js';
+import { createSkillRouter } from './routes/skill.js';
+import { createMemoryRouter } from './routes/memory.js';
+import { createAgentLoopRouter } from './routes/agent-loop.js';
+import { createMultiAgentRouter } from './routes/multi-agent.js';
+import { createLLMRouter } from './routes/llm.js';
+import { setupWsHandler } from './ws/handler.js';
+
+interface GatewayDeps {
+  audit: AuditLogger;
+  manifest: ManifestEngine;
+  vault: VaultInjector;
+  taskQueue: TaskQueue;
+  sandbox: SandboxBridge;
+  memory: MemoryManager;
+  agentRunner: AgentRunner;
+  agentRegistry: AgentRegistry;
+  messageBus: MessageBus;
+  llmManager: LLMManager;
+  config: {
+    port: number;
+    localToken: string;
+    localTokenRequired: boolean;
+    readonlyMode: boolean;
+  };
+}
+
+export function createGatewayServer(deps: GatewayDeps) {
+  const app = express();
+  const httpServer = createServer(app);
+
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true }));
+
+  // CORS（允许本地 UI 访问）
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (_req.method === 'OPTIONS') { res.sendStatus(204); return; }
+    next();
+  });
+
+  // 请求日志中间件
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    deps.audit.log({
+      action: 'http_request',
+      source: req.ip ?? 'unknown',
+      ok: true,
+      detail: `${req.method} ${req.path}`,
+    });
+    next();
+  });
+
+  // 零信任认证中间件
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    // /health 不需要认证
+    if (req.path === '/health') return next();
+
+    if (deps.config.localTokenRequired && deps.config.localToken) {
+      const authHeader = req.headers.authorization ?? '';
+      const token = authHeader.replace('Bearer ', '').trim();
+      if (token !== deps.config.localToken) {
+        deps.audit.log({
+          action: 'auth_rejected',
+          source: req.ip ?? 'unknown',
+          ok: false,
+          detail: `Unauthorized request to ${req.path}`,
+        });
+        res.status(401).json({ error: 'Unauthorized', code: 'INVALID_TOKEN' });
+        return;
+      }
+    }
+    next();
+  });
+
+  // 路由
+  app.use('/api/agent', createAgentRouter(deps));
+  app.use('/api/status', createStatusRouter(deps));
+  app.use('/api/skill', createSkillRouter(deps));
+  app.use('/api/memory', createMemoryRouter({ memory: deps.memory }));
+  app.use('/api/agent-loop', createAgentLoopRouter({ agentRunner: deps.agentRunner }));
+  app.use('/api/multi-agent', createMultiAgentRouter({ registry: deps.agentRegistry, bus: deps.messageBus }));
+  app.use('/api/llm', createLLMRouter({ llmManager: deps.llmManager, agentRunner: deps.agentRunner }));
+
+  // 健康检查
+  app.get('/health', (_req, res) => {
+    res.json({
+      status: 'ok',
+      version: '0.1.0',
+      system: 'aether-gateway',
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // WebSocket 处理（Agent 双向通信）
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  setupWsHandler(wss, deps);
+
+  // 错误处理
+  app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    console.error('[aether:gateway] Error:', err.message);
+    deps.audit.log({
+      action: 'server_error',
+      source: 'internal',
+      ok: false,
+      detail: err.message,
+    });
+    res.status(500).json({ error: 'Internal Server Error', message: err.message });
+  });
+
+  return httpServer;
+}

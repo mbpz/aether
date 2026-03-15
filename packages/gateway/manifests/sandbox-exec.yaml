@@ -1,0 +1,20 @@
+# Aether Gateway - Sandbox Execution Manifest
+# 允许在沙箱内执行代码（隔离执行，不允许网络/文件系统）
+name: sandbox-exec
+version: "1.0"
+
+# 沙箱策略：代码在 V8 隔离区执行，无需主机权限
+operations:
+  exec: true        # ✅ 允许执行（沙箱内隔离）
+  network: false    # ❌ 禁止沙箱内网络访问
+  filesystem: false # ❌ 禁止沙箱内文件系统访问
+
+network:
+  blockExternal: true
+  allowedHosts:
+    - "127.0.0.1"
+    - "localhost"
+
+filesystem:
+  readPaths: []
+  writePaths: []
