@@ -5,10 +5,17 @@ import { readdir, stat } from 'fs/promises';
 import { readFileSync } from 'fs';
 import { join, extname, dirname } from 'path';
 import { SkillParser, Skill, SkillMetadata } from '../parser/skill-parser.js';
+import { SkillSecurityAuditor } from '../audit/skill-auditor.js';
+import type { AuditReport } from '../audit/auditor-types.js';
 
 export class SkillRegistry {
   private skills: Map<string, Skill> = new Map();
   private parser = new SkillParser();
+  private auditor: SkillSecurityAuditor;
+
+  constructor(auditor?: SkillSecurityAuditor) {
+    this.auditor = auditor ?? new SkillSecurityAuditor();
+  }
 
   /**
    * 从目录批量扫描并注册技能
@@ -50,8 +57,51 @@ export class SkillRegistry {
    * 注册一个技能
    */
   register(skill: Skill) {
+    const report = this.auditor.scan({
+      content: skill.rawContent,
+      frontmatter: skill.level1 as unknown as Record<string, unknown>,
+      skillId: skill.id,
+      skillName: skill.level1.name,
+      source: skill.source,
+    });
+
+    if (!report.allowed) {
+      console.warn(`[aether:registry] Skill blocked by security audit: ${skill.level1.name} (score=${report.trustScore})`);
+      return;
+    }
+
+    if (report.trustScore > (skill.level1.trustScore ?? 0)) {
+      skill.level1.trustScore = report.trustScore;
+    }
+
     this.skills.set(skill.id, skill);
-    console.log(`[aether:registry] Registered skill: ${skill.level1.name} (source=${skill.source}, trust=${skill.level1.trustScore})`);
+    console.log(`[aether:registry] Registered skill: ${skill.level1.name} (source=${skill.source}, trust=${report.trustScore})`);
+  }
+
+  auditSkill(skillId: string): AuditReport | null {
+    const skill = this.skills.get(skillId);
+    if (!skill) return null;
+    return this.auditor.scan({
+      content: skill.rawContent,
+      frontmatter: skill.level1 as unknown as Record<string, unknown>,
+      skillId: skill.id,
+      skillName: skill.level1.name,
+      source: skill.source,
+    });
+  }
+
+  auditAll(): AuditReport[] {
+    const reports: AuditReport[] = [];
+    for (const skill of this.skills.values()) {
+      reports.push(this.auditor.scan({
+        content: skill.rawContent,
+        frontmatter: skill.level1 as unknown as Record<string, unknown>,
+        skillId: skill.id,
+        skillName: skill.level1.name,
+        source: skill.source,
+      }));
+    }
+    return reports;
   }
 
   /**
