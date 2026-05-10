@@ -3,6 +3,7 @@
 
 import { TaskQueue, SandboxTask } from './task-queue.js';
 import { AuditLogger } from '../audit/logger.js';
+import { ManifestEngine, ManifestValidationResult } from '../manifest/engine.js';
 
 // ── 内联 Sandbox 核心逻辑（避免跨包 ESM 路径问题）──────────────────────────
 
@@ -224,12 +225,14 @@ export class SandboxBridge {
   private policy: SecurityPolicy;
   private queue: TaskQueue;
   private audit: AuditLogger;
+  private manifest: ManifestEngine | null;
   private running = false;
   private workerBusy = false;
 
-  constructor(queue: TaskQueue, audit: AuditLogger) {
+  constructor(queue: TaskQueue, audit: AuditLogger, manifest?: ManifestEngine) {
     this.queue = queue;
     this.audit = audit;
+    this.manifest = manifest ?? null;
     this.policy = new SecurityPolicy({
       blockNetwork: true,
       blockFilesystem: true,
@@ -350,7 +353,31 @@ export class SandboxBridge {
         }
       }
 
-      // 2. 执行
+      // 2. Manifest 验证（安全门：确保操作被 Manifest 授权，才能使用注入的凭证）
+      if (this.manifest && task.manifestName) {
+        const validation = this.manifest.validate({
+          operation: task.operation,
+          manifestName: task.manifestName,
+        });
+        if (!validation.allowed) {
+          this.queue.markDone(taskId, {
+            ok: false,
+            error: `Manifest rejected operation: ${validation.reason}`,
+            durationMs: 0,
+          });
+          this.audit.log({
+            action: 'sandbox_manifest_rejected',
+            source: task.source,
+            ok: false,
+            detail: `Task ${taskId} manifest validation failed: ${validation.reason}`,
+            metadata: { taskId, operation: task.operation, manifestName: task.manifestName },
+          });
+          this.workerBusy = false;
+          return;
+        }
+      }
+
+      // 3. 执行
       if (task.operation === 'exec' && task.code) {
         const result = await runInSandbox(task.code, {
           timeout: 30_000,

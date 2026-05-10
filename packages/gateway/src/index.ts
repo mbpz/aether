@@ -35,7 +35,7 @@ async function main() {
   const manifest = new ManifestEngine();
   const vault = new VaultInjector();
   const taskQueue = new TaskQueue();
-  const sandbox = new SandboxBridge(taskQueue, audit);
+  const sandbox = new SandboxBridge(taskQueue, audit, manifest);
   const memory = new MemoryManager({
     storeDir: process.env.MEMORY_DIR ?? './memory-store',
     workingWindowSize: parseInt(process.env.MEMORY_WINDOW ?? '50', 10),

@@ -36,14 +36,9 @@ export class SandboxRuntime {
   }
 
   async init() {
-    try {
-      // 尝试加载 isolated-vm（V8 隔离沙箱）
-      this.ivm = await import('isolated-vm');
-      console.log('[aether:sandbox] Using isolated-vm (V8 isolate) runtime');
-    } catch {
-      console.warn('[aether:sandbox] isolated-vm not available, falling back to safe-eval mode');
-      this.ivm = undefined;
-    }
+    // 加载 isolated-vm（V8 隔离沙箱）
+    this.ivm = await import('isolated-vm');
+    console.log('[aether:sandbox] Using isolated-vm (V8 isolate) runtime');
   }
 
   async execute(request: ExecutionRequest): Promise<ExecutionResult> {
@@ -67,12 +62,7 @@ export class SandboxRuntime {
     const timeout = request.timeout ?? this.policy.config.maxExecTimeMs;
 
     // 2. 使用 isolated-vm 执行
-    if (this.ivm) {
-      return this.executeInIsolate(id, request, timeout, startTime);
-    }
-
-    // 3. Fallback: 安全求值模式（仅允许纯计算表达式）
-    return this.executeSafeEval(id, request, timeout, startTime);
+    return this.executeInIsolate(id, request, timeout, startTime);
   }
 
   private async executeInIsolate(
@@ -152,76 +142,10 @@ export class SandboxRuntime {
     }
   }
 
-  private async executeSafeEval(
-    id: string,
-    request: ExecutionRequest,
-    timeout: number,
-    startTime: number
-  ): Promise<ExecutionResult> {
-    // 安全求值：使用 Function 构造器 + 严格的白名单
-    const stdout: string[] = [];
-
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        resolve({
-          id,
-          ok: false,
-          error: `Execution timed out after ${timeout}ms`,
-          durationMs: Date.now() - startTime,
-          exitedAt: new Date().toISOString(),
-        });
-      }, timeout);
-
-      try {
-        // 构建安全执行上下文
-        const safeConsole = {
-          log: (...args: unknown[]) => stdout.push(args.map(String).join(' ')),
-          error: (...args: unknown[]) => stdout.push('[error] ' + args.map(String).join(' ')),
-        };
-
-        // 包裹代码，注入安全上下文
-        const wrappedCode = `
-          "use strict";
-          const console = __safeConsole__;
-          const input = __input__;
-          let __result__;
-          __result__ = (function() {
-            ${request.code}
-          })();
-          __result__;
-        `;
-
-        // eslint-disable-next-line no-new-func
-        const fn = new Function('__safeConsole__', '__input__', wrappedCode);
-        const output = fn(safeConsole, request.input ?? null);
-
-        clearTimeout(timer);
-        resolve({
-          id,
-          ok: true,
-          output,
-          stdout: stdout.join('\n'),
-          durationMs: Date.now() - startTime,
-          exitedAt: new Date().toISOString(),
-        });
-      } catch (err) {
-        clearTimeout(timer);
-        resolve({
-          id,
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-          stdout: stdout.join('\n'),
-          durationMs: Date.now() - startTime,
-          exitedAt: new Date().toISOString(),
-        });
-      }
-    });
-  }
-
   stats() {
     return {
       execCount: this.execCount,
-      runtime: this.ivm ? 'isolated-vm' : 'safe-eval',
+      runtime: 'isolated-vm',
       policy: this.policy.summary(),
     };
   }

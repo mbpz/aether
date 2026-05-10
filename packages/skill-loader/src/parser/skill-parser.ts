@@ -141,12 +141,66 @@ export class SkillParser {
     return sections;
   }
 
+  /**
+   * Robust format detection for SKILL.md variants.
+   * Uses frontmatter first (most reliable), then section headers, then content heuristics.
+   */
   private detectSource(content: string, frontmatter: Record<string, any>): Skill['source'] {
-    if (frontmatter.platform === 'manus' || content.includes('manus-skill')) return 'manus';
-    if (frontmatter.platform === 'openclaw' || content.includes('openclaw')) return 'openclaw';
+    // 1. Explicit platform in frontmatter (highest priority)
+    if (frontmatter.platform === 'manus') return 'manus';
+    if (frontmatter.platform === 'openclaw') return 'openclaw';
     if (frontmatter.platform === 'aether') return 'aether';
-    // Manus 格式特征检测
-    if (content.includes('## System Prompt') || content.includes('## Instructions')) return 'manus';
+
+    // 2. OpenClaw-specific markers in frontmatter
+    if (frontmatter['openclaw-plugin'] === true) return 'openclaw';
+
+    // 3. Aether-specific markers in frontmatter
+    if (frontmatter.aether === true) return 'aether';
+
+    // 4. Manus-specific markers in frontmatter (skills array is Manus-native)
+    const skills = frontmatter['skills'];
+    if (Array.isArray(skills) && skills.length > 0) return 'manus';
+
+    // 5. Check first 200 chars for early markers (avoid false positives from body text)
+    const head = content.slice(0, 200);
+
+    if (head.includes('manus-skill')) return 'manus';
+
+    // 6. Manus-specific section headers
+    if (content.includes('## System Prompt')) return 'manus';
+    if (content.includes('# Level 1:')) return 'manus';
+
+    // 7. OpenClaw-specific section (check early to avoid generic "Tools" matches)
+    if (head.includes('## Tools')) return 'openclaw';
+
+    // 8. Manus-compatible: ## Instructions (distinguish from other platforms)
+    if (content.includes('## Instructions')) {
+      // If we see ## Tools elsewhere in content, it's OpenClaw
+      if (content.includes('## Tools')) return 'openclaw';
+      return 'manus';
+    }
+
+    // 9. OpenClaw: ## Tools section (when not already matched)
+    if (content.includes('## Tools')) return 'openclaw';
+
+    // 10. Generic SKILL.md validation: if frontmatter has required fields, treat as valid
+    // This allows SkillRegistry to handle it as a generic skill
+    if (this.hasValidFrontmatter(frontmatter)) {
+      // Distinguish by section patterns if possible
+      if (content.includes('## Instructions')) return 'manus';
+      if (content.includes('## Tools')) return 'openclaw';
+      return 'unknown'; // Let SkillRegistry handle as generic
+    }
+
     return 'unknown';
+  }
+
+  /**
+   * Check if frontmatter has the hallmarks of a valid SKILL.md.
+   * If name, description, or version fields are present, it's likely a skill.
+   */
+  private hasValidFrontmatter(frontmatter: Record<string, any>): boolean {
+    const required = ['name', 'description', 'version'];
+    return required.some(field => field in frontmatter);
   }
 }

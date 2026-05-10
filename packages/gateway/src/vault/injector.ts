@@ -2,6 +2,7 @@
 // 敏感凭证仅临时加载到内存，不落盘不传云
 
 import { randomUUID } from 'crypto';
+import { ManifestEngine, ManifestValidationResult } from '../manifest/engine.js';
 
 interface VaultEntry {
   id: string;
@@ -77,6 +78,18 @@ export class VaultInjector {
       console.log(`[aether:vault] Secret ${id} revoked`);
     }
     return deleted;
+  }
+
+  /**
+   * 检查 Manifest 是否允许给定操作；不允许时拒绝注入凭证
+   * 这是 Vault 注入前的最后一道安全门，确保凭证不会泄漏给未授权操作
+   */
+  manifestCheck(manifest: ManifestEngine, request: {
+    operation: string;
+    target?: string;
+    manifestName?: string;
+  }): ManifestValidationResult {
+    return manifest.validate(request);
   }
 
   /**
