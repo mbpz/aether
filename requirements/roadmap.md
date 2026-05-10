@@ -156,25 +156,25 @@ EP-05 多Agent协作 ✅ 完成
 
 ```
 技能生态
-├── 技能市场上线 ← 待开始
-├── 开发者赏金计划 ← 待开始
-├── 安全评分体系（ZTA审计）← 待开始
-└── Skillpack 集成 ← Phase 2
+├── [P1] 技能市场上线 ← 待实现
+├── [P1] 开发者赏金计划 ← 待实现
+├── [P1] 安全评分体系（ZTA审计）← 待实现
+├── [P1] OpenClaw 迁移工具 ← 待实现
+├── [P1] Manus Playbook 导入 ← 待实现
+└── [P2] 社区插件审核流程 ← 待实现
 
 社区
-├── OpenClaw 迁移工具 ← 待开始
-├── Manus Playbook 导入 ← 待开始
-└── 社区插件审核流程 ← 待开始
+├── [P1] 技能格式自动转换器 ← 待实现
+└── [P2] 社区审核工作流 ← 待实现
 ```
 
 ### 阶段四：商业闭环（持续）
 
 ```
 EP-06 企业级私有部署
-├── [P2] Helm Chart K8s 部署 ← 待开始
-├── [P2] SOC2 审计日志 ← 待开始
-├── [P2] AgentBox 硬件规划 ← 待开始
-└── [P1] Kata + Firecracker 高安全模式 ← Phase 3
+├── [P1] Kata + Firecracker 高安全模式 ← Phase 3
+├── [P2] AgentBox 硬件规划 ← 待实现
+└── [P2] 企业合规报告生成器 ← 待实现
 ```
 
 ---
@@ -239,17 +239,27 @@ EP-06 企业级私有部署
 
 ## 八、短期开发任务（状态）
 
-| 任务 | 优先级 | 状态 |
-|------|--------|------|
-| T-001 Wasmtime Runtime PoC | P0 | 🔄 调研完成,官方包不可用 |
-| T-002 libbpf eBPF网络拦截 | P0 | ✅ 完成 |
-| T-003 Ollama嵌入集成 | P0 | ✅ 完成 |
-| T-004 Qdrant向量库集成 | P0 | ✅ 完成 |
-| T-005 Agent Team角色定义 | P1 | ✅ 完成 |
-| T-006 Skillpack格式兼容 | P1 | ✅ 完成 |
-| T-007 Manifest+Prompt Injection测试 | P0 | ✅ 完成 |
-| T-008 Vault凭证注入测试 | P0 | ✅ 完成 |
-| T-009 协作流程引擎 (Sequential/Hierarchical) | P2 | ✅ 完成 |
+| 任务 | 优先级 | 状态 | 说明 |
+|------|--------|------|------|
+| T-001 Wasmtime Runtime PoC | P0 | 🔄 调研完成,官方包不可用 | 官方npm包不可用 |
+| T-002 eBPF网络拦截 | P0 | ✅ 完成 | Mock→App层策略 |
+| T-003 Ollama嵌入集成 | P0 | ✅ 完成 | |
+| T-004 Qdrant向量库集成 | P0 | ✅ 完成 | |
+| T-005 Agent Team角色定义 | P1 | ✅ 完成 | |
+| T-006 Skillpack格式兼容 | P1 | ✅ 完成 | |
+| T-007 Manifest+Prompt Injection测试 | P0 | ✅ 完成 | |
+| T-008 Vault凭证注入测试 | P0 | ✅ 完成 | |
+| T-009 协作流程引擎 | P2 | ✅ 完成 | |
+| **T-010 技能市场API** | P1 | 📋 待实现 | Phase 3 |
+| **T-011 开发者赏金计划** | P1 | 📋 待实现 | Phase 3 |
+| **T-012 安全评分体系（ZTA）** | P1 | 📋 待实现 | Phase 3 |
+| **T-013 OpenClaw迁移工具** | P1 | 📋 待实现 | Phase 3 |
+| **T-014 Manus Playbook导入** | P1 | 📋 待实现 | Phase 3 |
+| **T-015 社区插件审核流程** | P1 | 📋 待实现 | Phase 3 |
+| **T-016 技能格式自动转换器** | P1 | 📋 待实现 | Phase 3 |
+| **T-017 Kata+Firecracker** | P1 | 📋 待实现 | Phase 3 |
+| **T-018 AgentBox硬件规划** | P2 | 📋 待实现 | Phase 4 |
+| **T-019 企业合规报告生成器** | P2 | 📋 待实现 | Phase 4 |
 
 ---
 
@@ -283,6 +293,7 @@ EP-06 企业级私有部署
 | | Per-Agent沙箱 | ✅ |
 | | TeamOrchestrator | ✅ |
 | | 协作流程引擎 | ✅ |
-| **EP-06 部署** | Helm Chart | ✅ |
+| **EP-06 部署** | Helm Chart K8s | ✅ |
 | | SOC2审计 | ✅ |
-| | Kata+Firecracker | 🔄 Phase 3 |
+| | Kata+Firecracker | 📋 Phase 3 |
+| | AgentBox硬件 | 📋 Phase 4 |
