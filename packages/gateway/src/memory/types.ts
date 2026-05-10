@@ -47,3 +47,35 @@ export interface MemoryStats {
   };
   total: number;
 }
+
+// ── Memory Compaction (L2 → L3) ─────────────────────────────────────────────
+
+export interface MemoryCompactionConfig {
+  /** Enable background compaction (default: false) */
+  enabled?: boolean;
+  /** Interval between compaction runs in ms (default: 3600000 = 1 hour) */
+  intervalMs?: number;
+  /** Minimum L2 events before triggering compaction (default: 10) */
+  minEventsToCompact?: number;
+  /** Maximum L2 events to process per compaction run (default: 100) */
+  maxEventsPerCompaction?: number;
+}
+
+export interface CompactionResult {
+  compacted: number;       // Number of L2 events processed
+  knowledgeExtracted: number; // Number of L3 entries created
+  sessionGroups: number;  // Number of session/topic groups formed
+  durationMs: number;     // Time taken for this compaction run
+  usingLlm: boolean;       // Whether LLM summarization was used
+  skipped: boolean;        // True if skipped due to insufficient events
+}
+
+/** State for tracking compaction progress */
+export interface CompactionState {
+  lastCompactionTimestamp: string | null;  // ISO timestamp; only events after this are processed
+  eventsSinceLastCompaction: number;       // Count of new L2 events
+  totalCompactions: number;                // Total compaction runs performed
+  totalEventsCompacted: number;            // Cumulative events compacted
+  totalKnowledgeExtracted: number;         // Cumulative L3 entries created
+  lastResult: CompactionResult | null;     // Result of last run
+}

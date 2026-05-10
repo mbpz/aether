@@ -4,12 +4,22 @@
 // L3 Semantic Memory → Ollama + Qdrant（TF-IDF fallback）
 
 import { randomUUID } from 'crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import type { MemoryEntry, MemoryQuery, MemoryQueryResult, MemoryStats, MemoryTier } from './types.js';
+import type {
+  MemoryCompactionConfig,
+  CompactionResult,
+  CompactionState,
+  MemoryEntry,
+  MemoryQuery,
+  MemoryQueryResult,
+  MemoryStats,
+  MemoryTier,
+} from './types.js';
 import { TFIDFVectorizer } from './vectorizer.js';
 import type { OllamaVectorizer } from './ollama-vectorizer.js';
 import type { QdrantStore, SearchResult } from './qdrant-store.js';
+import type { LLMProvider } from '../llm/provider.js';
 
 const DEFAULT_WORKING_WINDOW = 50;   // L1：保留最近 50 条
 const DEFAULT_EPISODIC_DIR   = process.env.MEMORY_DIR ?? './memory-store';
@@ -43,6 +53,20 @@ export class MemoryManager {
   private semanticIndexPath: string;
   private semanticDirty = false;   // true = embeddings stale; only applies to fallback mode
   private static readonly SEMANTIC_REFRESH_THRESHOLD = 500;
+
+  // ── L2 → L3 Compaction ─────────────────────────────────────────────────────
+  private _compactionConfig: Required<MemoryCompactionConfig> | null = null;
+  private _compactionTimer: ReturnType<typeof setInterval> | null = null;
+  private _compactionState: CompactionState = {
+    lastCompactionTimestamp: null,
+    eventsSinceLastCompaction: 0,
+    totalCompactions: 0,
+    totalEventsCompacted: 0,
+    totalKnowledgeExtracted: 0,
+    lastResult: null,
+  };
+  /** Optional LLM provider for summarization */
+  private _llmProvider: LLMProvider | null = null;
 
   /**
    * @param opts.workingWindowSize  L1 滑动窗口大小
@@ -176,8 +200,353 @@ export class MemoryManager {
     this.working = [];
   }
 
-  /** 统计信息 */
-  stats(): MemoryStats {
+  // ── L2 → L3 Compaction ─────────────────────────────────────────────────────
+
+  /**
+   * Enable automatic memory compaction from L2 (episodic) to L3 (semantic).
+   * Runs in the background at the configured interval.
+   *
+   * @param config - Compaction configuration
+   * @param llmProvider - Optional LLM provider for summarization; if not provided,
+   *                      fallback NLP pattern extraction is used
+   */
+  enableCompaction(config: MemoryCompactionConfig = {}, llmProvider?: LLMProvider): void {
+    if (this._compactionTimer) {
+      clearInterval(this._compactionTimer);
+      this._compactionTimer = null;
+    }
+
+    this._compactionConfig = {
+      enabled: config.enabled ?? false,
+      intervalMs: config.intervalMs ?? 3_600_000,
+      minEventsToCompact: config.minEventsToCompact ?? 10,
+      maxEventsPerCompaction: config.maxEventsPerCompaction ?? 100,
+    };
+    this._llmProvider = llmProvider ?? null;
+
+    if (!this._compactionConfig.enabled) {
+      console.log('[aether:memory:compaction] Disabled (enabled=false)');
+      return;
+    }
+
+    console.log(
+      `[aether:memory:compaction] Enabled: interval=${this._compactionConfig.intervalMs}ms, ` +
+      `minEvents=${this._compactionConfig.minEventsToCompact}, maxPerRun=${this._compactionConfig.maxEventsPerCompaction}, ` +
+      `llm=${this._llmProvider ? 'available' : 'none (fallback NLP)'}`,
+    );
+
+    // Start background timer (non-blocking)
+    this._compactionTimer = setInterval(
+      () => { this.compactL2toL3().catch(err => console.error('[aether:memory:compaction] Run error:', err)); },
+      this._compactionConfig.intervalMs,
+    );
+  }
+
+  /**
+   * Disable automatic compaction and stop the background timer.
+   */
+  disableCompaction(): void {
+    if (this._compactionTimer) {
+      clearInterval(this._compactionTimer);
+      this._compactionTimer = null;
+    }
+    this._compactionConfig = null;
+    this._llmProvider = null;
+    console.log('[aether:memory:compaction] Disabled');
+  }
+
+  /** Returns current compaction state */
+  getCompactionState(): CompactionState {
+    return { ...this._compactionState };
+  }
+
+  /**
+   * Compact recent L2 episodic events into L3 semantic knowledge.
+   *
+   * Process:
+   * 1. Read all L2 JSONL files for events newer than lastCompactionTimestamp
+   * 2. Group events by sessionId (or group unassigned by approximate time windows)
+   * 3. For each group, extract knowledge via LLM (if available) or fallback NLP
+   * 4. Store condensed knowledge entries in L3
+   *
+   * This method is async so it can be called as fire-and-forget from the timer.
+   *
+   * @returns Promise resolving to compaction statistics
+   */
+  async compactL2toL3(): Promise<CompactionResult> {
+    const t0 = Date.now();
+
+    // If never compacted, initialize timestamp to epoch
+    if (!this._compactionState.lastCompactionTimestamp) {
+      this._compactionState.lastCompactionTimestamp = '1970-01-01T00:00:00.000Z';
+    }
+
+    // Collect all L2 events since last compaction
+    const newEvents = this._collectEventsSince(this._compactionState.lastCompactionTimestamp);
+
+    if (newEvents.length === 0) {
+      return { compacted: 0, knowledgeExtracted: 0, sessionGroups: 0, durationMs: Date.now() - t0, usingLlm: false, skipped: true };
+    }
+
+    const toProcess = newEvents.slice(0, this._compactionConfig?.maxEventsPerCompaction ?? 100);
+    const usingLlm = !!this._llmProvider;
+
+    // Group by sessionId; events without sessionId get grouped by ~5-min time windows
+    const groups = this._groupEventsBySessionOrTime(toProcess);
+
+    let knowledgeExtracted = 0;
+
+    for (const group of groups) {
+      const knowledge = await this._extractKnowledge(group, usingLlm);
+      if (knowledge && knowledge.length > 0) {
+        // Store each condensed fact as a L3 semantic entry
+        for (const fact of knowledge) {
+          await this._writeSemantic({
+            id: randomUUID(),
+            tier: 'semantic',
+            content: fact.content,
+            metadata: {
+              ...fact.metadata,
+              source: 'compaction',
+              sessionId: group.sessionId,
+              tags: ['compressed', ...(fact.metadata.tags ?? [])],
+              importance: 0.6, // compacted entries get moderate importance
+              compactedFrom: group.events.map(e => e.id),
+            },
+            createdAt: new Date().toISOString(),
+            accessedAt: new Date().toISOString(),
+            accessCount: 0,
+          });
+          knowledgeExtracted++;
+        }
+      }
+    }
+
+    const result: CompactionResult = {
+      compacted: toProcess.length,
+      knowledgeExtracted,
+      sessionGroups: groups.length,
+      durationMs: Date.now() - t0,
+      usingLlm,
+      skipped: false,
+    };
+
+    // Update state
+    this._compactionState.lastCompactionTimestamp = new Date().toISOString();
+    this._compactionState.eventsSinceLastCompaction = 0;
+    this._compactionState.totalCompactions++;
+    this._compactionState.totalEventsCompacted += result.compacted;
+    this._compactionState.totalKnowledgeExtracted += result.knowledgeExtracted;
+    this._compactionState.lastResult = result;
+
+    console.log(
+      `[aether:memory:compaction] Run #${this._compactionState.totalCompactions}: ` +
+      `compacted=${result.compacted} groups=${result.sessionGroups} ` +
+      `knowledge=${result.knowledgeExtracted} (LLM=${result.usingLlm}) ${result.durationMs}ms`,
+    );
+
+    return result;
+  }
+
+  /**
+   * Read all L2 JSONL files and return events newer than the given timestamp.
+   */
+  private _collectEventsSince(since: string): MemoryEntry[] {
+    const sinceMs = new Date(since).getTime();
+    const events: MemoryEntry[] = [];
+
+    if (!existsSync(this.episodicDir)) return events;
+
+    let files: string[] = [];
+    try {
+      files = readdirSync(this.episodicDir).filter(f => f.endsWith('.jsonl'));
+    } catch { return events; }
+
+    for (const file of files) {
+      const path = join(this.episodicDir, file);
+      try {
+        const lines = readFileSync(path, 'utf-8').split('\n').filter(Boolean);
+        for (const line of lines) {
+          try {
+            const entry: MemoryEntry = JSON.parse(line);
+            const createdMs = new Date(entry.createdAt).getTime();
+            if (createdMs > sinceMs) {
+              events.push(entry);
+            }
+          } catch { /* skip malformed */ }
+        }
+      } catch { /* skip unreadable files */ }
+    }
+
+    return events;
+  }
+
+  /**
+   * Group events by sessionId; events without sessionId are grouped by approximate
+   * 5-minute time windows to keep unassigned events semantically coherent.
+   */
+  private _groupEventsBySessionOrTime(events: MemoryEntry[]): Array<{ sessionId: string | undefined; events: MemoryEntry[] }> {
+    const groups = new Map<string, MemoryEntry[]>();
+    const WINDOW_MS = 5 * 60 * 1000; // 5-minute windows for session-less events
+
+    for (const event of events) {
+      const sid = event.metadata.sessionId;
+      if (sid) {
+        if (!groups.has(sid)) groups.set(sid, []);
+        groups.get(sid)!.push(event);
+      } else {
+        // Group by time window
+        const windowKey = Math.floor(new Date(event.createdAt).getTime() / WINDOW_MS).toString();
+        if (!groups.has(windowKey)) groups.set(windowKey, []);
+        groups.get(windowKey)!.push(event);
+      }
+    }
+
+    return Array.from(groups.entries()).map(([sessionId, evts]) => ({
+      sessionId: isNaN(Number(sessionId)) ? sessionId : undefined,
+      events: evts.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    }));
+  }
+
+  /**
+   * Extract structured knowledge from a group of L2 events.
+   *
+   * With LLM: sends events to LLM with a summarization prompt and gets back
+   *           structured facts { content, metadata }.
+   * Without LLM: falls back to simple NLP pattern extraction (entity/fact distillation).
+   */
+  private async _extractKnowledge(
+    group: { sessionId: string | undefined; events: MemoryEntry[] },
+    useLlm: boolean,
+  ): Promise<Array<{ content: string; metadata: MemoryEntry['metadata'] }>> {
+    if (group.events.length === 0) return [];
+
+    if (useLlm && this._llmProvider) {
+      return this._extractKnowledgeViaLlm(group);
+    }
+
+    // Fallback: simple pattern-based extraction
+    return this._extractKnowledgeViaNlp(group);
+  }
+
+  /**
+   * LLM-based knowledge extraction: prompt the LLM to summarize key facts.
+   */
+  private async _extractKnowledgeViaLlm(
+    group: { sessionId: string | undefined; events: MemoryEntry[] },
+  ): Promise<Array<{ content: string; metadata: MemoryEntry['metadata'] }>> {
+    if (!this._llmProvider) return [];
+
+    // Build context: concatenate all event contents
+    const context = group.events
+      .map(e => `[${e.createdAt}] ${e.content}`)
+      .join('\n---\n');
+
+    const sessionNote = group.sessionId ? ` (session: ${group.sessionId})` : '';
+
+    const messages: Array<{ role: string; content: string }> = [
+      {
+        role: 'system',
+        content: `You are a knowledge distillation engine. Given a sequence of memory events, extract the key facts, decisions, and conclusions. Output a JSON array of objects with fields:
+- content: a concise, self-contained fact or knowledge snippet (1-3 sentences)
+- metadata.tags: relevant topic tags
+
+Return ONLY the JSON array, no markdown, no explanation. Aim for 3-10 facts depending on how much new information is in the events.`,
+      },
+      {
+        role: 'user',
+        content: `Memory events from recent session${sessionNote}:\n${context}\n\nExtract key knowledge:`,
+      },
+    ];
+
+    try {
+      const resp = await this._llmProvider.chat(messages, { maxTokens: 1024, temperature: 0.3 });
+
+      const text = resp.choices?.[0]?.message?.content ?? '';
+      // Try to extract JSON from the response
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item: { content?: string; metadata?: MemoryEntry['metadata']; tags?: string[] }) => ({
+            content: item.content ?? '',
+            metadata: {
+              tags: item.tags ?? [],
+              source: 'llm-compaction',
+            },
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('[aether:memory:compaction] LLM extraction failed, falling back to NLP:', err);
+    }
+
+    // Fallback on parse error
+    return this._extractKnowledgeViaNlp(group);
+  }
+
+  /**
+   * Fallback NLP-based knowledge extraction: extract simple facts using pattern matching.
+   * Identifies:
+   * - Sentences with facts (containing verbs like "created", "decided", "learned", "found")
+   * - Entity mentions (capitalized terms, quoted strings)
+   * - Tool/action results
+   */
+  private _extractKnowledgeViaNlp(
+    group: { sessionId: string | undefined; events: MemoryEntry[] },
+  ): Array<{ content: string; metadata: MemoryEntry['metadata'] }> {
+    const facts: Array<{ content: string; metadata: MemoryEntry['metadata'] }> = [];
+    const seen = new Set<string>();
+
+    for (const event of group.events) {
+      const lines = event.content.split(/[.!?]+/).filter(l => l.trim().length > 15);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (seen.has(trimmed)) continue;
+
+        // Simple relevance filter: look for action/fact indicators
+        const lower = trimmed.toLowerCase();
+        const hasAction = /(\b(built|created|decided|learned|found|completed|fixed|updated|changed|configured|deployed|tested)\b/i).test(lower);
+        const hasEntity = /[A-Z][a-zA-Z]{2,}/.test(trimmed); // capitalized word
+        const isUnique = trimmed.split(/\s+/).length >= 4; // at least 4 words
+
+        if (hasAction || hasEntity) {
+          const factContent = trimmed.length > 200 ? trimmed.slice(0, 197) + '...' : trimmed;
+          if (factContent.length >= 10) {
+            facts.push({
+              content: factContent,
+              metadata: {
+                source: 'nlp-compaction',
+                tags: this._inferTags(event.content),
+                importance: 0.5,
+              },
+            });
+            seen.add(trimmed);
+          }
+        }
+      }
+    }
+
+    // Deduplicate and cap at 20 facts per group
+    return facts.slice(0, 20);
+  }
+
+  /** Very simple tag inference from content keywords */
+  private _inferTags(content: string): string[] {
+    const tags: string[] = [];
+    const lower = content.toLowerCase();
+    if (/\b(code|function|class|api|endpoint)\b/.test(lower)) tags.push('code');
+    if (/\b(deploy|build|test|run|execute)\b/.test(lower)) tags.push('action');
+    if (/\b(error|bug|fix|issue)\b/.test(lower)) tags.push('debug');
+    if (/\b(config|setting|env|option)\b/.test(lower)) tags.push('config');
+    if (tags.length === 0) tags.push('general');
+    return tags;
+  }
+
+  // ── 内部辅助 ──────────────────────────────────────────────────────────────
+
+  /** 确保基准目录存在 */
+  private _ensureDir(): void {
     const workingTokens = this.working.reduce((s, e) => s + e.content.split(/\s+/).length, 0);
     const episodicSize = this._episodicFileSize();
     const useOllama = !!this.embeddingProvider;
