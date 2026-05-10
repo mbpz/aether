@@ -1,4 +1,4 @@
-import type { MessageBus, BusMessage } from './bus.js';
+import type { MessageBus, Message } from './bus.js';
 
 export interface ReliableConfig {
   maxRetries?: number;
@@ -8,7 +8,7 @@ export interface ReliableConfig {
 export type ConnectionState = 'connected' | 'reconnecting' | 'disconnected';
 
 export interface DeadLetterEntry {
-  message: BusMessage;
+  message: Message;
   failedAt: string;
   retryCount: number;
   lastError: string;
@@ -28,7 +28,7 @@ export class ReliableMessageBus {
     this.baseDelayMs = config.baseDelayMs ?? 1000;
   }
 
-  publish(msg: BusMessage): { success: boolean; retryCount: number } {
+  publish(msg: Message): { success: boolean; retryCount: number } {
     const msgKey = `${msg.from}:${msg.to}:${msg.type}`;
     const retries = this.retryCount.get(msgKey) ?? 0;
     try {
@@ -47,7 +47,7 @@ export class ReliableMessageBus {
     }
   }
 
-  consume(recipient: string, limit: number): BusMessage[] {
+  consume(recipient: string, limit: number): Message[] {
     return this.bus.consume(recipient, limit);
   }
 

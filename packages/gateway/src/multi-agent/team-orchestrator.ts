@@ -5,6 +5,10 @@ import { randomUUID } from 'crypto';
 import type { AgentRegistry } from './registry.js';
 import type { MessageBus } from './bus.js';
 import type { AgentSandboxManager } from './sandbox-executor.js';
+import { TaskAnalyzer } from './task-analyzer.js';
+import { ReliableMessageBus } from './reliable-bus.js';
+import { DependencyGraph } from './dependency-graph.js';
+import { ResultAggregator } from './result-aggregator.js';
 
 // ── 类型定义 ───────────────────────────────────────────────────────────────
 
@@ -43,6 +47,9 @@ export class TeamOrchestrator {
   private sandboxManager: AgentSandboxManager;
   private teams = new Map<string, TeamMember[]>();
   private teamTasks = new Map<string, TeamTask[]>();
+  private taskAnalyzer: TaskAnalyzer;
+  private reliableBus: ReliableMessageBus;
+  private resultAggregator = new ResultAggregator();
 
   constructor(
     registry: AgentRegistry,
@@ -52,6 +59,8 @@ export class TeamOrchestrator {
     this.registry = registry;
     this.bus = bus;
     this.sandboxManager = sandboxManager;
+    this.taskAnalyzer = new TaskAnalyzer();
+    this.reliableBus = new ReliableMessageBus(bus);
   }
 
   /**
@@ -179,14 +188,14 @@ export class TeamOrchestrator {
   }
 
   /**
-   * 任务拆分：根据成员数量和能力将大任务拆分为子任务
-   * 简化版：平均分配 description 内容
+   * 任务拆分：基于智能分析分配任务给Agent
    */
   private _splitTask(task: string, members: TeamMember[]): TeamTask[] {
-    return members.map(member => ({
+    const assignments = this.taskAnalyzer.analyze(task, members);
+    return assignments.map(a => ({
       taskId: randomUUID(),
       description: task,
-      assignedAgent: member.agentId,
+      assignedAgent: a.agentId,
       status: 'pending' as const,
     }));
   }
