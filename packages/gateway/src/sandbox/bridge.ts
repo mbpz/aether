@@ -95,6 +95,9 @@ interface ExecResult {
 
 // ── isolated-vm 加载（使用 require 兼容原生 C++ 模块）───────────────────────
 let _ivm: typeof import('isolated-vm') | null = null;
+
+// Export SecurityPolicy for testing purposes
+export { SecurityPolicy };
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   _ivm = require('isolated-vm');
