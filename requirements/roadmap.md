@@ -242,7 +242,7 @@ EP-06 企业级私有部署
 | 任务 | 优先级 | 状态 |
 |------|--------|------|
 | T-001 Wasmtime Runtime PoC | P0 | 🔄 调研完成,官方包不可用 |
-| T-002 libbpf eBPF网络拦截 | P0 | 🔄 待方案 |
+| T-002 libbpf eBPF网络拦截 | P0 | ✅ 完成 |
 | T-003 Ollama嵌入集成 | P0 | ✅ 完成 |
 | T-004 Qdrant向量库集成 | P0 | ✅ 完成 |
 | T-005 Agent Team角色定义 | P1 | ✅ 完成 |
@@ -261,7 +261,7 @@ EP-06 企业级私有部署
 | | 移除safe-eval | ✅ |
 | | Manifest验证 | ✅ |
 | | Wasmtime Runtime | 🔄 调研:官方包不可用 |
-| | eBPF网络拦截 | 🔄 Mock就绪 |
+| | eBPF网络拦截 | ✅ Mock就绪,集成完成 |
 | **EP-02 Gateway** | HTTP服务框架 | ✅ |
 | | Manifest解析器 | ✅ |
 | | Vault注入器 | ✅ |
@@ -271,7 +271,7 @@ EP-06 企业级私有部署
 | | 三级渐进披露 | ✅ |
 | | 格式检测增强 | ✅ |
 | | Skillpack锁文件 | ✅ |
-| | 安全审计自动化 | 🔄 审计器就绪 |
+| | 安全审计自动化 | ✅ |
 | **EP-04 记忆** | L1/L2/L3三层 | ✅ |
 | | O(N²)修复 | ✅ |
 | | Ollama密集嵌入 | ✅ |
@@ -283,6 +283,6 @@ EP-06 企业级私有部署
 | | Per-Agent沙箱 | ✅ |
 | | TeamOrchestrator | ✅ |
 | | 协作流程引擎 | ✅ |
-| **EP-06 部署** | Helm Chart | 🔄 Phase 3 |
-| | SOC2审计 | 🔄 Phase 3 |
+| **EP-06 部署** | Helm Chart | ✅ |
+| | SOC2审计 | ✅ |
 | | Kata+Firecracker | 🔄 Phase 3 |
