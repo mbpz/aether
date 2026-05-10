@@ -4,6 +4,9 @@
 import { readFileSync, existsSync } from 'fs';
 import yaml from 'js-yaml';
 
+import { SkillpackLockLoader } from './skilllock-loader.js';
+import { SkillpackEntry } from './skilllock-types.js';
+
 // Level 1: 元数据（永远加载，< 100 tokens）
 export interface SkillMetadata {
   name: string;
@@ -43,10 +46,11 @@ export interface Skill {
   level2?: SkillInstructions;
   level3?: SkillResources;
   rawContent: string;
-  source: 'manus' | 'openclaw' | 'aether' | 'unknown';
+  source: 'manus' | 'openclaw' | 'aether' | 'skillpack' | 'unknown';
 }
 
 export class SkillParser {
+  private lockLoader = new SkillpackLockLoader();
 
   /**
    * 从 SKILL.md 文件解析技能（兼容 Manus 格式）
@@ -62,12 +66,33 @@ export class SkillParser {
   /**
    * 从 Markdown 内容解析技能
    */
-  parseFromContent(content: string, source = 'unknown'): Skill {
+  parseFromContent(content: string, source = 'unknown', lockDir?: string): Skill {
     const frontmatter = this.extractFrontmatter(content);
     const sections = this.extractSections(content);
 
     // 检测来源格式
-    const skillSource = this.detectSource(content, frontmatter);
+    let skillSource = this.detectSource(content, frontmatter);
+
+    // Load skillpack lock file if directory provided
+    let lockEntries: SkillpackEntry[] = [];
+    if (lockDir) {
+      const lock = this.lockLoader.loadLockFile(lockDir);
+      if (lock) {
+        const deps = frontmatter.dependencies as string[] | undefined;
+        if (Array.isArray(deps)) {
+          for (const dep of deps) {
+            if (dep.startsWith('skillpack/')) {
+              const entry = this.lockLoader.resolveDep(dep, lock);
+              if (entry) lockEntries.push(entry);
+              else console.warn(`[aether:skillpack] Unresolved dep: ${dep} in ${lockDir}`);
+            }
+          }
+          if (lockEntries.length > 0) skillSource = 'skillpack';
+        }
+      } else {
+        console.warn(`[aether:skillpack] Lock file not found in ${lockDir}`);
+      }
+    }
 
     // Level 1: 元数据
     const level1: SkillMetadata = {
@@ -76,7 +101,8 @@ export class SkillParser {
       description: frontmatter.description ?? sections['description'] ?? '',
       category: frontmatter.category ?? 'general',
       author: frontmatter.author,
-      trustScore: frontmatter.trust_score ?? 0,
+      trustScore: frontmatter.trust_score ??
+        (lockEntries.length > 0 ? lockEntries[0].trustScore : 0),
       tags: frontmatter.tags ?? [],
       platform: frontmatter.platform ?? [skillSource],
     };
