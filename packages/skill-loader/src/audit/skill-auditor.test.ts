@@ -21,8 +21,8 @@ describe('SkillSecurityAuditor', () => {
     expect(report.issues).toHaveLength(0);
   });
 
-  it('score capped at 0 (multiple criticals)', () => {
-    const report = auditor.scan({ content: 'eval("x")\nrequire("child_process").spawn("ls")', frontmatter: {}, skillId: 'test', skillName: 'test', source: 'unknown' });
+  it('score capped at 0 (three criticals)', () => {
+    const report = auditor.scan({ content: 'eval("x")\nrequire("child_process").spawn("ls")\nnew Function("a")()', frontmatter: {}, skillId: 'test', skillName: 'test', source: 'unknown' });
     expect(report.trustScore).toBe(0);
     expect(report.allowed).toBe(false);
   });
