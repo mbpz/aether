@@ -38,6 +38,12 @@ export interface MemoryQueryResult {
 export interface MemoryStats {
   working: { count: number; tokens: number };
   episodic: { count: number; sizeBytes: number };
-  semantic: { count: number; vocabSize: number };
+  semantic: {
+    count: number;
+    vocabSize: number;
+    mode: 'ollama+qdrant' | 'tfidf-fallback';
+    embeddingProvider?: { cachedEmbeddings: number; dimension: number; model: string };
+    vectorStore?: { mode: string; cachedRecords: number; collection: string };
+  };
   total: number;
 }
