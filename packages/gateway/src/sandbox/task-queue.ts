@@ -27,6 +27,8 @@ export interface SandboxTask {
     violations?: Array<{ type: string; detail: string }>;
   };
   source: string;
+  /** EP-05: Agent ID for per-agent sandbox isolation */
+  agentId?: string;
 }
 
 export class TaskQueue extends EventEmitter {

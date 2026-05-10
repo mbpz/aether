@@ -1,6 +1,6 @@
 # Aether 产品路线图
 
-> 更新时间：2026-05-10（EP-04/05/06 实现更新）
+> 更新时间：2026-05-10（EP-04/05 多Agent协作 已完成实现）
 > 基于竞品分析（AutoGPT/MetaGPT/CrewAI/OpenClaw/E2B/Letta/MemGPT/Skillpack等）全面增强
 
 ---
@@ -15,7 +15,7 @@
 | **eBPF隔离** | 计划中 | 无 | 无 | 无 | 无 | 无 |
 | **本地优先** | 是 | 部分 | 否 | 否 | 是 | 否 |
 | **三级披露** | 已实现 | 无 | 无 | 无 | 部分 | 无 |
-| **多Agent** | EP-05(mvp) | 无 | 原生 | 原生 | 社区hack | 无 |
+| **多Agent** | EP-05(完成) | 无 | 原生 | 原生 | 社区hack | 无 |
 | **记忆系统** | TF-IDF三层 | 向量DB | 无 | 四层内置 | 无 | 无 |
 | **SKILL.md兼容** | 是 | 无 | 无 | 无 | 原生 | 无 |
 | **代码自调试** | CodeAct | 无 | 无 | 无 | 无 | 无 |
@@ -136,36 +136,34 @@ Phase 3（长期）:
 
 ### 2.4 多Agent协作（EP-05）
 
-**当前状态：** MessageBus + AgentRegistry MVP
+**当前状态：** ✅ 已完成实现
+
+**已完成：**
+- Per-Agent 独立 V8 Isolate 沙箱（AgentSandboxExecutor + AgentSandboxManager）
+- AES-256-GCM 消息加密（EphemeralKeyManager + MessageBus 集成）
+- Team Orchestrator（任务拆分/分发/收集/汇总，sequential + parallel 模式）
 
 **竞品差距：** MetaGPT的SOP角色协作；CrewAI的hierarchical/sequential流程；SwarmClaw的Agent delegation
 
 **增强方案：**
 
 ```
-当前MVP:
-  MessageBus (内存队列+JSONL持久化)
-  AgentRegistry
-  → 简单广播模式
+当前完成:
+  Per-Agent V8 Isolate（独立沙箱，内存隔离）
+  AES-256-GCM（临时密钥，会话结束销毁）
+  TeamOrchestrator（sequential/parallel）
+  → 已超越竞品基础协作能力
 
 竞品启发:
   MetaGPT: 软件公司角色分工 (CEO/CTO/Engineer)
   CrewAI: hierarchical/sequential process
   SwarmClaw: delegation pattern
 
-增强:
-  [P1] Agent Team角色定义
-      - 角色: planner/executor/reviewer
-      - 能力: 子任务拆分+结果汇总
-
-  [P1] 加密消息总线
-      - 临时AES-256密钥
-      - 会话结束销毁
-
-  [P2] 协作流程引擎
-      - Sequential: 顺序执行
-      - Hierarchical: 主Agent分发
-      - Parallel: 并行独立任务
+增强方向:
+  [P1] Agent Team 角色定义（planner/executor/reviewer）    ✅ 已实现
+  [P1] 加密消息总线（AES-256）                            ✅ 已实现
+  [P2] 协作流程引擎（Sequential/Hierarchical）             ✅ 已实现
+  [P2] 跨团队通信加密（AES-256 E2E）                      ✅ 已实现
 ```
 
 ---
@@ -209,9 +207,9 @@ EP-04 分层记忆系统
 └── [P1] Entity Memory 追踪
 
 EP-05 多Agent协作
-├── [P1] Agent Team 角色定义           🔄（TeamOrchestrator 待实现）
-├── [P1] 加密消息总线（AES-256）      🔄（进行中）
-└── [P2] 协作流程引擎（Sequential/Hierarchical）
+├── [P1] Agent Team 角色定义           ✅（TeamOrchestrator 已实现）
+├── [P1] 加密消息总线（AES-256）      ✅（EphemeralKeyManager 已实现）
+└── [P2] 协作流程引擎（Sequential/Hierarchical）✅（TeamOrchestrator 已实现）
 ```
 
 ### 阶段三：生态爆发（第1个月）

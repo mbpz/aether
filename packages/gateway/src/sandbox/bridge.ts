@@ -92,12 +92,11 @@ interface ExecResult {
   violations?: PolicyViolation[];
 }
 
-// ── isolated-vm 加载（使用 createRequire 兼容原生 C++ 模块）──────────────
-import { createRequire } from 'module';
-const _require = createRequire(import.meta.url);
+// ── isolated-vm 加载（使用 require 兼容原生 C++ 模块）───────────────────────
 let _ivm: typeof import('isolated-vm') | null = null;
 try {
-  _ivm = _require('isolated-vm');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  _ivm = require('isolated-vm');
   console.log('[aether:sandbox-bridge] ✅ isolated-vm loaded (V8 Isolate mode)');
 } catch {
   console.warn('[aether:sandbox-bridge] ⚠️  isolated-vm not available, using safe-eval fallback');

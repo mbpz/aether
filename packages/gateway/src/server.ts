@@ -13,6 +13,8 @@ import { MemoryManager } from './memory/manager.js';
 import { AgentRunner } from './agent-loop/runner.js';
 import { AgentRegistry } from './multi-agent/registry.js';
 import { MessageBus } from './multi-agent/bus.js';
+import { AgentSandboxManager } from './multi-agent/sandbox-executor.js';
+import { TeamOrchestrator } from './multi-agent/team-orchestrator.js';
 import { LLMManager } from './llm/manager.js';
 import { createAgentRouter } from './routes/agent.js';
 import { createStatusRouter } from './routes/status.js';
@@ -33,6 +35,8 @@ interface GatewayDeps {
   agentRunner: AgentRunner;
   agentRegistry: AgentRegistry;
   messageBus: MessageBus;
+  agentSandboxManager: AgentSandboxManager;
+  teamOrchestrator: TeamOrchestrator;
   llmManager: LLMManager;
   config: {
     port: number;
@@ -97,7 +101,7 @@ export function createGatewayServer(deps: GatewayDeps) {
   app.use('/api/skill', createSkillRouter(deps));
   app.use('/api/memory', createMemoryRouter({ memory: deps.memory }));
   app.use('/api/agent-loop', createAgentLoopRouter({ agentRunner: deps.agentRunner }));
-  app.use('/api/multi-agent', createMultiAgentRouter({ registry: deps.agentRegistry, bus: deps.messageBus }));
+  app.use('/api/multi-agent', createMultiAgentRouter({ registry: deps.agentRegistry, bus: deps.messageBus, sandboxManager: deps.agentSandboxManager, teamOrchestrator: deps.teamOrchestrator }));
   app.use('/api/llm', createLLMRouter({ llmManager: deps.llmManager, agentRunner: deps.agentRunner }));
 
   // 健康检查

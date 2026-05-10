@@ -14,6 +14,8 @@ import { MemoryManager } from './memory/manager.js';
 import { AgentRunner } from './agent-loop/runner.js';
 import { AgentRegistry } from './multi-agent/registry.js';
 import { MessageBus } from './multi-agent/bus.js';
+import { AgentSandboxManager } from './multi-agent/sandbox-executor.js';
+import { TeamOrchestrator } from './multi-agent/team-orchestrator.js';
 import { LLMManager } from './llm/manager.js';
 
 const PORT = parseInt(process.env.GATEWAY_PORT ?? '18790', 10);
@@ -42,9 +44,15 @@ async function main() {
   // EP-05: Agent Loop
   const agentRunner = new AgentRunner({ memory, sandbox });
 
+  // EP-05: Per-agent isolated sandbox manager
+  const agentSandboxManager = new AgentSandboxManager();
+
   // EP-06: 多 Agent 协作
   const messageBus = new MessageBus();
   const agentRegistry = new AgentRegistry(messageBus); // 注入 bus，fix ISSUE-002
+
+  // EP-05: Team Orchestrator（依赖 registry + bus + sandboxManager）
+  const teamOrchestrator = new TeamOrchestrator(agentRegistry, messageBus, agentSandboxManager);
 
   // EP-07: LLM Provider
   const llmManager = new LLMManager();
@@ -59,7 +67,8 @@ async function main() {
 
   const server = createGatewayServer({
     audit, manifest, vault, config, taskQueue, sandbox, memory,
-    agentRunner, agentRegistry, messageBus, llmManager,
+    agentRunner, agentRegistry, messageBus, agentSandboxManager,
+    teamOrchestrator, llmManager,
   });
 
   server.listen(PORT, '127.0.0.1', () => {

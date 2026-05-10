@@ -88,7 +88,8 @@ export class AgentSandboxExecutor {
   async init(): Promise<void> {
     if (this.initialized) return;
     try {
-      this.ivm = _require('isolated-vm');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      this.ivm = require('isolated-vm');
       console.log(`[aether:agent-sandbox:${this.agentId}] ✅ V8 isolate runtime ready`);
     } catch {
       console.warn(`[aether:agent-sandbox:${this.agentId}] ⚠️  isolated-vm not available`);
