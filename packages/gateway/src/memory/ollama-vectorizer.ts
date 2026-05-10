@@ -62,7 +62,7 @@ export class OllamaVectorizer {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: this.config.model, prompt: text }),
-        signal: controller.signal as any,
+        signal: controller.signal,
       });
 
       clearTimeout(timeout);
@@ -128,10 +128,14 @@ export class OllamaVectorizer {
   async ping(): Promise<{ ok: boolean; model: string; latencyMs: number; error?: string }> {
     const t0 = Date.now();
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
       const resp = await fetch(`${this.config.baseUrl}/api/tags`, {
         method: 'GET',
-        signal: AbortController.prototype.signal,
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
       });
+      clearTimeout(timeout);
       const latencyMs = Date.now() - t0;
 
       if (!resp.ok) {

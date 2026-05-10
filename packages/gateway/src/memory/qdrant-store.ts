@@ -42,7 +42,9 @@ export class QdrantStore {
   private qdrant: any = null;
   private initialized = false;
   private localCache: Map<string, QdrantRecord> = new Map();
-  private pendingUpserts: QdrantRecord[] = [];
+  private flushing = false;
+  private closed = false;
+  private flushInterval: ReturnType<typeof setInterval> | null = null;
   private flushIntervalMs = 2000;
 
   constructor(config: QdrantConfig = {}) {
@@ -55,7 +57,7 @@ export class QdrantStore {
       persistencePath: config.persistencePath ?? './memory-store/qdrant',
     };
 
-    setInterval(() => this._flush(), this.flushIntervalMs);
+    this.flushInterval = setInterval(() => this._flush(), this.flushIntervalMs);
   }
 
   async init(): Promise<void> {
@@ -140,7 +142,9 @@ export class QdrantStore {
     if (this.qdrant) {
       try {
         await this.qdrant.delete(this.config.collection, { points: [id] });
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn(`[aether:qdrant] Delete failed for id ${id}:`, err);
+      }
     }
     this.localCache.delete(id);
   }
@@ -161,10 +165,24 @@ export class QdrantStore {
   }
 
   /**
+   * 关闭 store，停止轮询并执行最终 flush
+   */
+  close(): void {
+    this.closed = true;
+    if (this.flushInterval) {
+      clearInterval(this.flushInterval);
+      this.flushInterval = null;
+    }
+    this._flush();
+  }
+
+  /**
    * 刷新本地缓存到磁盘
    */
   private _flush(): void {
-    if (this.localCache.size === 0) return;
+    if (this.closed || this.localCache.size === 0) return;
+    if (this.flushing) return;
+    this.flushing = true;
 
     try {
       if (!existsSync(this.config.persistencePath)) {
@@ -175,6 +193,8 @@ export class QdrantStore {
       writeFileSync(path, lines, 'utf-8');
     } catch (err) {
       console.warn('[aether:qdrant] Flush failed:', err);
+    } finally {
+      this.flushing = false;
     }
   }
 
