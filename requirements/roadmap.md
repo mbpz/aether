@@ -241,15 +241,15 @@ EP-06 企业级私有部署
 
 | 任务 | 优先级 | 状态 |
 |------|--------|------|
-| T-001 Wasmtime Runtime PoC | P0 | 🔄 Phase 2 |
-| T-002 libbpf eBPF网络拦截 | P0 | 🔄 Phase 2 |
+| T-001 Wasmtime Runtime PoC | P0 | 🔄 调研完成,官方包不可用 |
+| T-002 libbpf eBPF网络拦截 | P0 | 🔄 待方案 |
 | T-003 Ollama嵌入集成 | P0 | ✅ 完成 |
 | T-004 Qdrant向量库集成 | P0 | ✅ 完成 |
 | T-005 Agent Team角色定义 | P1 | ✅ 完成 |
-| T-006 Skillpack格式兼容 | P1 | 🔄 待开始 |
+| T-006 Skillpack格式兼容 | P1 | ✅ 完成 |
 | T-007 Manifest+Prompt Injection测试 | P0 | ✅ 完成 |
 | T-008 Vault凭证注入测试 | P0 | ✅ 完成 |
-| T-009 协作流程引擎 (Sequential/Hierarchical) | P2 | 🔄 待开始 |
+| T-009 协作流程引擎 (Sequential/Hierarchical) | P2 | ✅ 完成 |
 
 ---
 
@@ -260,8 +260,8 @@ EP-06 企业级私有部署
 | **EP-01 沙箱** | isolated-vm安全加固 | ✅ |
 | | 移除safe-eval | ✅ |
 | | Manifest验证 | ✅ |
-| | Wasmtime Runtime | 🔄 Phase 2 |
-| | eBPF网络拦截 | 🔄 Phase 2 |
+| | Wasmtime Runtime | 🔄 调研:官方包不可用 |
+| | eBPF网络拦截 | 🔄 Mock就绪 |
 | **EP-02 Gateway** | HTTP服务框架 | ✅ |
 | | Manifest解析器 | ✅ |
 | | Vault注入器 | ✅ |
@@ -270,19 +270,19 @@ EP-06 企业级私有部署
 | | OpenClaw兼容 | ✅ |
 | | 三级渐进披露 | ✅ |
 | | 格式检测增强 | ✅ |
-| | Skillpack锁文件 | 🔄 Phase 2 |
-| | 安全审计自动化 | 🔄 Phase 2 |
+| | Skillpack锁文件 | ✅ |
+| | 安全审计自动化 | 🔄 审计器就绪 |
 | **EP-04 记忆** | L1/L2/L3三层 | ✅ |
 | | O(N²)修复 | ✅ |
-| | Ollama密集嵌入 | 🔄 Phase 2 |
-| | Qdrant集成 | 🔄 Phase 2 |
+| | Ollama密集嵌入 | ✅ |
+| | Qdrant集成 | ✅ |
 | | 自动压缩提炼 | 🔄 Phase 2 |
 | **EP-05 多Agent** | MessageBus | ✅ |
 | | AgentRegistry | ✅ |
 | | AES-256加密 | ✅ |
 | | Per-Agent沙箱 | ✅ |
 | | TeamOrchestrator | ✅ |
-| | 协作流程引擎 | 🔄 待开始 |
+| | 协作流程引擎 | ✅ |
 | **EP-06 部署** | Helm Chart | 🔄 Phase 3 |
 | | SOC2审计 | 🔄 Phase 3 |
 | | Kata+Firecracker | 🔄 Phase 3 |
