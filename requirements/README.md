@@ -22,12 +22,32 @@ requirements/
 └── roadmap.md             # 产品路线图
 ```
 
+## 竞品分析
+
+基于对 AutoGPT、MetaGPT、CrewAI、OpenClaw、E2B、Letta、Microsoft Agent Governance Toolkit 等 20+ 项目的深度分析，形成以下关键洞察：
+
+| 维度 | Aether定位 | 核心优势 |
+|------|-----------|---------|
+| **沙箱安全** | 内核级（WASM+eBPF） | 唯一本地+内核级隔离 |
+| **隐私** | 完全本地 | 数据永不离开设备 |
+| **Token效率** | 三级渐进披露 | 唯一完整实现 |
+| **多Agent** | 独立子沙箱+加密总线 | 唯一安全多Agent |
+| **技能生态** | 全格式兼容 | SKILL.md+OpenClaw+Manus |
+
+详见 [competitive-analysis.md](competitive-analysis.md)。
+
+## 设计文档
+
+- [design.md](design.md) - 系统架构、模块设计、安全模型
+- [roadmap.md](roadmap.md) - 产品路线图（基于竞品增强）
+- [competitive-analysis.md](competitive-analysis.md) - 深度竞品分析
+
 ## Epic 总览
 
 | ID | Epic | 优先级 | 阶段 | 状态 |
 |----|------|--------|------|------|
-| EP-01 | 安全沙箱执行层（WASM + eBPF） | P0 | 阶段一 | 📋 待开始 |
-| EP-02 | 零信任控制平面（Gateway） | P0 | 阶段一 | 📋 待开始 |
+| EP-01 | 安全沙箱执行层（WASM + eBPF） | P0 | 阶段一 | 🔄 进行中 |
+| EP-02 | 零信任控制平面（Gateway） | P0 | 阶段一 | 🔄 进行中 |
 | EP-03 | 渐进式技能系统（SKILL.md） | P1 | 阶段一 | 📋 待开始 |
 | EP-04 | 分层记忆系统（RAG + 事件流） | P1 | 阶段二 | 📋 待开始 |
 | EP-05 | 多 Agent 协作系统 | P2 | 阶段二 | 📋 待开始 |
