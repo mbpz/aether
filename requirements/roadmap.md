@@ -243,8 +243,8 @@ EP-06 企业级私有部署
 |------|--------|------|
 | T-001 Wasmtime Runtime PoC | P0 | 🔄 Phase 2 |
 | T-002 libbpf eBPF网络拦截 | P0 | 🔄 Phase 2 |
-| T-003 Ollama嵌入集成 | P0 | 🔄 Phase 2 |
-| T-004 Qdrant向量库集成 | P0 | 🔄 Phase 2 |
+| T-003 Ollama嵌入集成 | P0 | ✅ 完成 |
+| T-004 Qdrant向量库集成 | P0 | ✅ 完成 |
 | T-005 Agent Team角色定义 | P1 | ✅ 完成 |
 | T-006 Skillpack格式兼容 | P1 | 🔄 待开始 |
 | T-007 Manifest+Prompt Injection测试 | P0 | ✅ 完成 |
