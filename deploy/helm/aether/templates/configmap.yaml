@@ -1,0 +1,23 @@
+{{- /*
+ConfigMap template for Gateway environment variables
+EP-06: Non-sensitive config as ConfigMap, secrets handled separately
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aether.fullname" . }}-config
+  labels:
+    app.kubernetes.io/name: {{ include "aether.name" . }}-gateway
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: aether
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  GATEWAY_PORT: {{ .Values.gateway.env.GATEWAY_PORT | quote }}
+  LOCAL_TOKEN_AUTH_REQUIRED: {{ .Values.gateway.env.LOCAL_TOKEN_AUTH_REQUIRED | quote }}
+  READONLY_MODE: {{ .Values.gateway.env.READONLY_MODE | quote }}
+  MEMORY_DIR: {{ .Values.gateway.env.MEMORY_DIR | quote }}
+  MEMORY_WINDOW: {{ .Values.gateway.env.MEMORY_WINDOW | quote }}
+  LLM_BASE_URL: {{ .Values.gateway.env.LLM_BASE_URL | quote }}
+  LLM_MODEL: {{ .Values.gateway.env.LLM_MODEL | quote }}
+  LOCAL_DATA_ONLY: {{ .Values.gateway.env.LOCAL_DATA_ONLY | quote }}

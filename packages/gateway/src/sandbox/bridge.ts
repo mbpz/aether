@@ -4,6 +4,7 @@
 import { TaskQueue, SandboxTask } from './task-queue.js';
 import { AuditLogger } from '../audit/logger.js';
 import { ManifestEngine, ManifestValidationResult } from '../manifest/engine.js';
+import { EbpfFirewall } from '@aether/sandbox';
 
 // ── 内联 Sandbox 核心逻辑（避免跨包 ESM 路径问题）──────────────────────────
 
@@ -229,13 +230,15 @@ export class SandboxBridge {
   private queue: TaskQueue;
   private audit: AuditLogger;
   private manifest: ManifestEngine | null;
+  private firewall: EbpfFirewall | null;
   private running = false;
   private workerBusy = false;
 
-  constructor(queue: TaskQueue, audit: AuditLogger, manifest?: ManifestEngine) {
+  constructor(queue: TaskQueue, audit: AuditLogger, manifest?: ManifestEngine, firewall?: EbpfFirewall) {
     this.queue = queue;
     this.audit = audit;
     this.manifest = manifest ?? null;
+    this.firewall = firewall ?? null;
     this.policy = new SecurityPolicy({
       blockNetwork: true,
       blockFilesystem: true,
@@ -334,9 +337,61 @@ export class SandboxBridge {
     });
 
     try {
-      // 1. 静态扫描
+      // 1. 静态扫描 + eBPF 防火墙检查
       if (task.code) {
         const violations = this.policy.scanCode(task.code);
+
+        // eBPF 防火墙检查：提取并验证所有网络目标
+        if (this.firewall && violations.some(v => v.type === 'network')) {
+          const networkTargets = this._extractNetworkTargets(task.code);
+          for (const target of networkTargets) {
+            const check = this.firewall.checkConnection({
+              protocol: target.protocol,
+              remoteAddress: target.host,
+              remotePort: target.port,
+              direction: 'egress',
+            });
+
+            // 记录到防火墙日志
+            this.firewall.logConnection({
+              action: check.allowed ? 'allowed' : 'blocked',
+              protocol: target.protocol,
+              remoteAddress: target.host,
+              remotePort: target.port,
+              agentId: task.source,
+              reason: check.reason,
+            });
+
+            // 如果防火墙阻止，直接拒绝执行
+            if (!check.allowed) {
+              this.queue.markDone(taskId, {
+                ok: false,
+                error: `eBPF firewall blocked: ${check.reason}`,
+                violations,
+                durationMs: 0,
+              });
+              this.audit.log({
+                action: 'sandbox_ebpf_blocked',
+                source: task.source,
+                ok: false,
+                detail: `Task ${taskId} eBPF blocked ${target.protocol} ${target.host}:${target.port} — ${check.reason}`,
+                metadata: { taskId, target, matchedRule: check.matchedRule?.id },
+              });
+              this.workerBusy = false;
+              return;
+            }
+
+            // 允许的也记录到审计日志
+            this.audit.log({
+              action: 'sandbox_ebpf_allowed',
+              source: task.source,
+              ok: true,
+              detail: `Task ${taskId} eBPF allowed ${target.protocol} ${target.host}:${target.port}`,
+              metadata: { taskId, target },
+            });
+          }
+        }
+
         if (violations.length > 0) {
           this.queue.markDone(taskId, {
             ok: false,
@@ -429,5 +484,62 @@ export class SandboxBridge {
 
   policyStats() {
     return this.policy.summary();
+  }
+
+  /**
+   * 从代码中提取网络访问目标（供 eBPF 防火墙检查使用）
+   */
+  private _extractNetworkTargets(code: string): Array<{ protocol: string; host: string; port?: number }> {
+    const targets: Array<{ protocol: string; host: string; port?: number }> = [];
+
+    // 提取 require('http') / require('https')
+    const httpRequire = /require\s*\(\s*['"](https?)['"]\s*\)/g;
+    let match;
+    while ((match = httpRequire.exec(code)) !== null) {
+      targets.push({ protocol: 'tcp', host: '*', port: match[1] === 'https' ? 443 : 80 });
+    }
+
+    // 提取 fetch() URL
+    const fetchRe = /\bfetch\s*\(\s*['"]([^'"]+)['"]/g;
+    while ((match = fetchRe.exec(code)) !== null) {
+      try {
+        const url = new URL(match[1]);
+        targets.push({
+          protocol: url.protocol === 'https:' ? 'tcp' : 'tcp',
+          host: url.hostname,
+          port: url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80),
+        });
+      } catch {
+        targets.push({ protocol: 'tcp', host: match[1] });
+      }
+    }
+
+    // 提取 import from 'https://...'
+    const importRe = /import\s+.*\s+from\s+['"](https?:\/\/[^'"]+)['"]/g;
+    while ((match = importRe.exec(code)) !== null) {
+      try {
+        const url = new URL(match[1]);
+        targets.push({
+          protocol: 'tcp',
+          host: url.hostname,
+          port: url.port ? parseInt(url.port) : (url.protocol === 'https:' ? 443 : 80),
+        });
+      } catch {
+        // ignore
+      }
+    }
+
+    // 提取 WebSocket URL
+    const wsRe = /new\s+WebSocket\s*\(\s*['"]([^'"]+)['"]/g;
+    while ((match = wsRe.exec(code)) !== null) {
+      try {
+        const url = new URL(match[1]);
+        targets.push({ protocol: 'tcp', host: url.hostname, port: url.port ? parseInt(url.port) : (url.protocol === 'wss:' ? 443 : 80) });
+      } catch {
+        targets.push({ protocol: 'tcp', host: match[1] });
+      }
+    }
+
+    return targets;
   }
 }

@@ -1,12 +1,13 @@
 // Audit Logger - SOC2-Compliant Audit Logging
 // 记录所有 Gateway 操作，支持 SOC2 兼容格式输出
-// - 不可变日志条目（hash chaining）
+// - 不可变日志条目（HMAC-SHA256 hash chaining）
 // - 操作分类 (action categories)
 // - 执行者 attribution
 // - 防篡改验证
+// - 保留策略
 
-import { appendFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
-import { createHash, randomUUID } from 'crypto';
+import { appendFileSync, mkdirSync, existsSync, readFileSync, readdirSync, statSync, unlinkSync } from 'fs';
+import { createHmac, createHash, randomUUID } from 'crypto';
 import { join } from 'path';
 
 // ── SOC2 Audit Entry ─────────────────────────────────────────────────────────
@@ -60,6 +61,23 @@ interface AuditRecord extends AuditEntry {
   version: 1;
 }
 
+export interface RetentionPolicy {
+  maxAgeDays: number;
+  maxFileSizeMB: number;
+}
+
+export interface IntegrityResult {
+  valid: boolean;
+  entriesVerified: number;
+  errors: string[];
+  firstInvalidEntry?: number;
+}
+
+export interface RetentionResult {
+  deleted: number;
+  errors: string[];
+}
+
 // ── Audit Logger ──────────────────────────────────────────────────────────────
 
 export class AuditLogger {
@@ -67,14 +85,32 @@ export class AuditLogger {
   private buffer: AuditRecord[] = [];
   private sequence = 0;
   private lastHash = 'GENESIS';
+  private signingKey: Buffer;
+  private retentionPolicy: RetentionPolicy;
+
   private readonly FLUSH_INTERVAL_MS = 2000;
   private readonly LOG_VERSION = 1;
+  private readonly DEFAULT_RETENTION_DAYS = 90;
+  private readonly DEFAULT_MAX_FILE_SIZE_MB = 100;
 
-  constructor() {
-    this.logDir = process.env.AUDIT_LOG_DIR ?? './runtime/audit';
+  constructor(options?: {
+    logDir?: string;
+    signingKey?: string;
+    retentionPolicy?: Partial<RetentionPolicy>;
+  }) {
+    this.logDir = options?.logDir ?? process.env.AUDIT_LOG_DIR ?? './runtime/audit';
+    const key = options?.signingKey ?? process.env.AUDIT_SIGNING_KEY ?? 'default-signing-key';
+    this.signingKey = Buffer.from(key, 'utf-8');
+    this.retentionPolicy = {
+      maxAgeDays: options?.retentionPolicy?.maxAgeDays ?? this.DEFAULT_RETENTION_DAYS,
+      maxFileSizeMB: options?.retentionPolicy?.maxFileSizeMB ?? this.DEFAULT_MAX_FILE_SIZE_MB,
+    };
+
     this.ensureDir();
     this._loadLastHash(); // 从上次日志恢复hash链
     setInterval(() => this.flush(), this.FLUSH_INTERVAL_MS);
+    // Apply retention policy daily
+    setInterval(() => this.applyRetentionPolicy(), 24 * 60 * 60 * 1000);
   }
 
   private ensureDir() {
@@ -88,11 +124,12 @@ export class AuditLogger {
    */
   private _loadLastHash() {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const logFile = join(this.logDir, `${today}.jsonl`);
-      if (!existsSync(logFile)) return;
+      const logFiles = this._getLogFiles();
+      if (logFiles.length === 0) return;
 
-      const lines = readFileSync(logFile, 'utf-8').split('\n').filter(Boolean);
+      // Read the last file to find the highest sequence
+      const lastFile = logFiles[logFiles.length - 1];
+      const lines = readFileSync(lastFile, 'utf-8').split('\n').filter(Boolean);
       if (lines.length === 0) return;
 
       const lastLine = lines[lines.length - 1];
@@ -105,7 +142,20 @@ export class AuditLogger {
   }
 
   /**
-   * 计算条目的hash (SHA-256)
+   * Get sorted list of log files
+   */
+  private _getLogFiles(): string[] {
+    if (!existsSync(this.logDir)) return [];
+
+    return readdirSync(this.logDir)
+      .filter(f => f.endsWith('.jsonl'))
+      .map(f => join(this.logDir, f))
+      .sort();
+  }
+
+  /**
+   * 计算条目的HMAC-SHA256 hash
+   * Uses: HMAC-SHA256(signingKey, previousHash + entryData)
    */
   private _computeHash(record: Omit<AuditRecord, 'hash'>): string {
     const data = JSON.stringify({
@@ -119,15 +169,37 @@ export class AuditLogger {
       outcome: record.outcome,
       resource: record.resource,
       detail: record.detail,
-    });
-    return createHash('sha256').update(data).digest('hex');
+      metadata: record.metadata,
+      ipAddress: record.ipAddress,
+      userAgent: record.userAgent,
+    }, Object.keys({
+      id: record.id,
+      timestamp: record.timestamp,
+      sequence: record.sequence,
+      previousHash: record.previousHash,
+      action: record.action,
+      category: record.category,
+      actor: record.actor,
+      outcome: record.outcome,
+      resource: record.resource,
+      detail: record.detail,
+      metadata: record.metadata,
+      ipAddress: record.ipAddress,
+      userAgent: record.userAgent,
+    }).sort());
+
+    // Create chain: HMAC-SHA256(signingKey, previousHash + SHA256(entryData))
+    const entryHash = createHash('sha256').update(data).digest('hex');
+    const chainData = `${record.previousHash}:${entryHash}`;
+
+    return createHmac('sha256', this.signingKey).update(chainData).digest('hex');
   }
 
   /**
    * 记录审计日志
    */
-  log(entry: AuditEntry) {
-    if (entry._skipLog) return;
+  log(entry: AuditEntry): string {
+    if (entry._skipLog) return '';
 
     const now = new Date();
     const timestamp = now.toISOString();
@@ -154,10 +226,12 @@ export class AuditLogger {
     if (entry.outcome === 'failure') {
       this.flush();
     }
+
+    return record.id;
   }
 
-  private flush() {
-    if (this.buffer.length === 0) return;
+  private flush(): number {
+    if (this.buffer.length === 0) return 0;
 
     const today = new Date().toISOString().split('T')[0];
     const logFile = join(this.logDir, `${today}.jsonl`);
@@ -165,9 +239,12 @@ export class AuditLogger {
     try {
       const lines = this.buffer.map((r) => JSON.stringify(r)).join('\n') + '\n';
       appendFileSync(logFile, lines, 'utf-8');
+      const count = this.buffer.length;
       this.buffer = [];
+      return count;
     } catch (err) {
       console.error('[aether:audit] Failed to flush logs:', err);
+      return 0;
     }
   }
 
@@ -187,73 +264,111 @@ export class AuditLogger {
   }
 
   /**
-   * 验证日志文件完整性 (SOC2)
-   * 从后往前验证每个条目的hash链
+   * 获取所有日志文件路径
    */
-  verifyLogIntegrity(logPath?: string): {
-    valid: boolean;
-    errors: string[];
-    entriesChecked: number;
-  } {
-    const path = logPath ?? this.todayLogPath();
-    if (!existsSync(path)) {
-      return { valid: false, errors: [`Log file not found: ${path}`], entriesChecked: 0 };
-    }
+  logFilePaths(): string[] {
+    return this._getLogFiles();
+  }
 
-    try {
-      const lines = readFileSync(path, 'utf-8').split('\n').filter(Boolean);
-      const errors: string[] = [];
-      let previousHash = 'GENESIS';
+  /**
+   * 验证日志文件完整性 (SOC2)
+   * 从前往后验证每个条目的HMAC-SHA256 hash链
+   */
+  verifyLogIntegrity(): IntegrityResult {
+    const logFiles = this._getLogFiles();
+    const errors: string[] = [];
+    let entriesVerified = 0;
+    let previousHash = 'GENESIS';
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        let record: AuditRecord;
-        try {
-          record = JSON.parse(line) as AuditRecord;
-        } catch {
-          errors.push(`Line ${i + 1}: JSON parse error`);
-          continue;
+    for (const file of logFiles) {
+      let fileValid = true;
+
+      try {
+        const content = readFileSync(file, 'utf-8');
+        const lines = content.split('\n').filter(Boolean);
+
+        for (let i = 0; i < lines.length; i++) {
+          let record: AuditRecord;
+
+          // Parse check
+          try {
+            record = JSON.parse(lines[i]) as AuditRecord;
+          } catch {
+            errors.push(`${file}:${i + 1} - JSON parse error`);
+            fileValid = false;
+            break;
+          }
+
+          // Hash chain continuity check
+          if (record.previousHash !== previousHash) {
+            errors.push(
+              `${file}:${i + 1} - Hash chain broken (expected previousHash: ${previousHash}, got: ${record.previousHash})`
+            );
+            fileValid = false;
+            break;
+          }
+
+          // Re-compute and verify HMAC-SHA256 hash
+          const { hash, ...recordData } = record;
+          const computed = this._computeHash(recordData as Omit<AuditRecord, 'hash'>);
+
+          if (computed !== hash) {
+            errors.push(
+              `${file}:${i + 1} - Hash mismatch (entry may have been tampered with)` +
+              `\n    Expected: ${computed}\n    Got:      ${hash}`
+            );
+            fileValid = false;
+            break;
+          }
+
+          previousHash = record.hash;
+          entriesVerified++;
         }
-
-        // 检查hash链
-        if (record.previousHash !== previousHash) {
-          errors.push(`Line ${i + 1}: Hash chain broken (expected ${previousHash}, got ${record.previousHash})`);
-        }
-
-        // 重新计算hash并验证
-        const computed = this._computeHash(record);
-        if (computed !== record.hash) {
-          errors.push(`Line ${i + 1}: Hash mismatch (entry may have been tampered)`);
-        }
-
-        previousHash = record.hash;
+      } catch (err) {
+        errors.push(`${file} - Read error: ${err}`);
       }
 
-      return {
-        valid: errors.length === 0,
-        errors,
-        entriesChecked: lines.length,
-      };
-    } catch (err) {
-      return { valid: false, errors: [`Read error: ${err}`], entriesChecked: 0 };
+      if (!fileValid && errors.length > 0) {
+        const firstError = errors[errors.length - 1];
+        const match = firstError.match(/:(\d+)/);
+        const firstInvalidEntry = match ? parseInt(match[1], 10) : undefined;
+
+        return {
+          valid: false,
+          entriesVerified,
+          errors,
+          firstInvalidEntry,
+        };
+      }
     }
+
+    return {
+      valid: errors.length === 0,
+      entriesVerified,
+      errors,
+    };
   }
 
   /**
    * 获取指定时间范围内的审计日志
    */
   queryByTimeRange(startTime: string, endTime: string): AuditRecord[] {
-    const path = this.todayLogPath();
-    if (!existsSync(path)) return [];
+    const results: AuditRecord[] = [];
+    const logFiles = this._getLogFiles();
 
-    try {
-      const lines = readFileSync(path, 'utf-8').split('\n').filter(Boolean);
-      return lines
-        .map((l) => JSON.parse(l) as AuditRecord)
-        .filter((r) => r.timestamp >= startTime && r.timestamp <= endTime);
-    } catch {
-      return [];
+    for (const file of logFiles) {
+      try {
+        const lines = readFileSync(file, 'utf-8').split('\n').filter(Boolean);
+        const filtered = lines
+          .map((l) => JSON.parse(l) as AuditRecord)
+          .filter((r) => r.timestamp >= startTime && r.timestamp <= endTime);
+        results.push(...filtered);
+      } catch {
+        // Skip unreadable files
+      }
     }
+
+    return results;
   }
 
   /**
@@ -273,4 +388,64 @@ export class AuditLogger {
   currentSequence(): number {
     return this.sequence;
   }
+
+  /**
+   * 获取保留策略设置
+   */
+  getRetentionPolicy(): RetentionPolicy {
+    return { ...this.retentionPolicy };
+  }
+
+  /**
+   * 应用保留策略 - 删除过期日志文件
+   */
+  applyRetentionPolicy(): RetentionResult {
+    const maxAgeMs = this.retentionPolicy.maxAgeDays * 24 * 60 * 60 * 1000;
+    const cutoffDate = new Date(Date.now() - maxAgeMs);
+    const logFiles = this._getLogFiles();
+    let deleted = 0;
+    const errors: string[] = [];
+
+    for (const file of logFiles) {
+      try {
+        const stats = statSync(file);
+        const fileDate = new Date(stats.mtime);
+
+        if (fileDate < cutoffDate) {
+          unlinkSync(file);
+          deleted++;
+        }
+      } catch (err) {
+        errors.push(`Failed to process ${file}: ${err}`);
+      }
+    }
+
+    return { deleted, errors };
+  }
+
+  /**
+   * 强制刷新缓冲区
+   */
+  forceFlush(): number {
+    return this.flush();
+  }
+}
+
+// ── Singleton Instance ───────────────────────────────────────────────────────
+
+let defaultLogger: AuditLogger | null = null;
+
+export function getAuditLogger(options?: {
+  logDir?: string;
+  signingKey?: string;
+  retentionPolicy?: Partial<RetentionPolicy>;
+}): AuditLogger {
+  if (!defaultLogger) {
+    defaultLogger = new AuditLogger(options);
+  }
+  return defaultLogger;
+}
+
+export function resetAuditLogger(): void {
+  defaultLogger = null;
 }

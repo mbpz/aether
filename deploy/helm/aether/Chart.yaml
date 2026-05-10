@@ -1,0 +1,19 @@
+apiVersion: v2
+name: aether
+description: Aether Zero-Trust Control Plane - Kubernetes Helm Chart
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - aether
+  - zero-trust
+  - multi-agent
+  - sandbox
+home: https://github.com/aether-project/aether
+sources:
+  - https://github.com/aether-project/aether
+maintainers:
+  - name: Aether Team
+    email: team@aether.dev
+annotations:
+  category: Application Framework

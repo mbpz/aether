@@ -1,0 +1,120 @@
+# Default values for Aether Zero-Trust Control Plane
+# Target: Gateway service primarily (EP-06)
+
+replicaCount: 3
+
+image:
+  repository: aether/gateway
+  pullPolicy: IfNotPresent
+  # Overwrite in production with actual image
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 18790
+  wsPort: 18790
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+  hosts:
+    - host: aether.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Gateway configuration (environment variables)
+gateway:
+  env:
+    # Server
+    GATEWAY_PORT: "18790"
+    LOCAL_API_TOKEN: ""
+    LOCAL_TOKEN_AUTH_REQUIRED: "false"
+    READONLY_MODE: "true"
+
+    # Memory
+    MEMORY_DIR: "./memory-store"
+    MEMORY_WINDOW: "50"
+
+    # LLM Provider (Ollama)
+    LLM_BASE_URL: ""
+    LLM_MODEL: ""
+    LLM_API_KEY: ""
+
+    # Data isolation (EP-06 requirement)
+    LOCAL_DATA_ONLY: "false"
+
+# Resource limits for gateway
+resources:
+  limits:
+    cpu: "2000m"
+    memory: "2Gi"
+  requests:
+    cpu: "500m"
+    memory: "512Mi"
+
+# Node selector, tolerations, affinity
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aether-gateway
+          topologyKey: kubernetes.io/hostname
+
+# Persistence for memory store (if using hostPath - suitable for single-node dev)
+persistence:
+  enabled: false
+  storageClass: ""
+  size: "1Gi"
+  hostPath: "/var/lib/aether/memory-store"
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Liveness and readiness probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 18790
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 18790
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Service monitor for Prometheus (optional)
+serviceMonitor:
+  enabled: false

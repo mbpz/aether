@@ -1,0 +1,46 @@
+{{- /*
+PVC template for memory store persistence
+EP-06: Local data only requirement - PV stays within cluster
+*/ -}}
+{{- if .Values.persistence.enabled -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "aether.fullname" . }}-pvc
+  labels:
+    app.kubernetes.io/name: {{ include "aether.name" . }}-gateway
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: aether
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.persistence.storageClass }}
+  storageClassName: {{ .Values.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+  {{- if .Values.persistence.hostPath }}
+  selector:
+    matchLabels:
+      aether.dev/memory-store: "true"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "aether.fullname" . }}-pv
+  labels:
+    aether.dev/memory-store: "true"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: {{ .Values.persistence.size }}
+  {{- if .Values.persistence.hostPath }}
+  hostPath:
+    path: {{ .Values.persistence.hostPath }}
+  {{- end }}
+  persistentVolumeReclaimPolicy: Retain
+{{- end }}
