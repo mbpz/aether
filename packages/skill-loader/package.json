@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Aether Skill System - Progressive Disclosure Loader",
   "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "skill-audit": "./bin/skill-audit.js"
+  },
   "scripts": {
     "dev": "node --import tsx src/index.ts",
     "build": "tsc -p tsconfig.json"
