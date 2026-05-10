@@ -23,6 +23,7 @@ import { createMemoryRouter } from './routes/memory.js';
 import { createAgentLoopRouter } from './routes/agent-loop.js';
 import { createMultiAgentRouter } from './routes/multi-agent.js';
 import { createLLMRouter } from './routes/llm.js';
+import { createSkillAuditRouter } from './routes/skill-audit.js';
 import { setupWsHandler } from './ws/handler.js';
 
 interface GatewayDeps {
@@ -99,6 +100,8 @@ export function createGatewayServer(deps: GatewayDeps) {
   app.use('/api/agent', createAgentRouter(deps));
   app.use('/api/status', createStatusRouter(deps));
   app.use('/api/skill', createSkillRouter(deps));
+  const skillAuditRouter = createSkillAuditRouter({ registry });
+  app.use('/api/skill/audit', skillAuditRouter);
   app.use('/api/memory', createMemoryRouter({ memory: deps.memory }));
   app.use('/api/agent-loop', createAgentLoopRouter({ agentRunner: deps.agentRunner }));
   app.use('/api/multi-agent', createMultiAgentRouter({ registry: deps.agentRegistry, bus: deps.messageBus, sandboxManager: deps.agentSandboxManager, teamOrchestrator: deps.teamOrchestrator }));
