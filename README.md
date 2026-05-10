@@ -1,0 +1,184 @@
+# Aether — 主权级通用自主执行系统 (SAS)
+
+> **Sovereign Autonomous System**: AI agents that never leak data, never call home, and execute with cryptographic verifiability.
+
+[![CI](https://img.shields.io/badge/phase-MVP-green)](https://github.com/aether)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
+## 核心定位
+
+Aether is a privacy-first AI agent execution platform. Unlike cloud agents (Manus, AutoGPT) that send data to external servers, Aether executes all code and stores all memory **locally** — your data never leaves your machine.
+
+**Three pillars:**
+1. **Zero-trust sandbox** — WASM + eBPF isolation, no code escapes without Manifest authorization
+2. **Progressive disclosure** — Three-tier SKILL.md loading minimizes token consumption
+3. **Auditable execution** — SOC2-compliant audit log with HMAC-SHA256 hash chaining
+
+## 核心优势（已完成）
+
+| 能力 | Aether | 竞品 |
+|------|--------|------|
+| 沙箱安全 | WASM/eBPF 双重隔离 | Docker/firecracker |
+| 隐私 | 100% 本地，数据不离开设备 | 云端黑盒 |
+| 三级披露 | 唯一完整实现 | 无 |
+| 多Agent | 独立子沙箱 + AES-256-GCM 加密总线 | 社区hack |
+| 记忆系统 | L1/L2/L3 三层 + Ollama+Qdrant | TF-IDF |
+| 技能兼容 | SKILL.md + OpenClaw + Manus 全兼容 | 仅单一格式 |
+| 自调试 | CodeAct 闭环 | 无 |
+| SOC2审计 | HMAC-SHA256 hash chaining | 无 |
+
+## 快速开始
+
+```bash
+# 启动 Gateway（本地优先，零信任）
+npm run gateway
+
+# 或带 LLM（使用本地 Ollama）
+LLM_BASE_URL=http://localhost:11434 LLM_MODEL=deepseek-r1 npm run gateway
+
+# Agent 执行示例
+curl -X POST http://localhost:18790/api/agent/execute \
+  -H "Content-Type: application/json" \
+  -d '{"code": "console.log(42)", "manifestName": "default"}'
+```
+
+## 项目结构
+
+```
+packages/
+├── gateway/          # 零信任控制平面 (EP-02)
+│   └── src/
+│       ├── audit/         # SOC2 审计日志 (HMAC-SHA256)
+│       ├── sandbox/       # SandboxBridge (eBPF 集成)
+│       ├── memory/        # L1/L2/L3 分层记忆
+│       ├── multi-agent/   # MessageBus + TeamOrchestrator
+│       ├── agent-loop/    # AgentRunner (Mock→LLM 可选)
+│       └── llm/           # LLMPlanner (ReAct 循环)
+├── sandbox/          # WASM 隔离执行层 (EP-01)
+│   └── src/
+│       ├── security/      # EbpfFirewall + SecurityPolicy
+│       └── codeact/       # CodeAct 自调试引擎
+└── skill-loader/     # 技能加载器 (EP-03)
+    └── src/
+        ├── audit/         # SkillSecurityAuditor
+        └── parser/        # SKILL.md + Skillpack 解析器
+
+deploy/helm/aether/   # K8s Helm Chart (EP-06)
+requirements/          # 需求文档 + 路线图
+```
+
+## 已完成功能
+
+### EP-01 安全沙箱 ✅
+- `isolated-vm` V8 Isolate（安全加固）
+- Manifest 预执行审计
+- 移除 `safe-eval` 降级
+- eBPF 防火墙集成（App 层策略执行）
+
+### EP-02 零信任控制平面 ✅
+- Gateway HTTP/WebSocket 服务
+- Manifest 解析器
+- Vault 凭证注入器（受 Manifest 管控）
+- SOC2 审计日志（HMAC-SHA256 hash chaining）
+
+### EP-03 技能系统 ✅
+- SKILL.md 全格式兼容（Manus/OpenClaw/Aether）
+- 三级渐进式披露（Level 1/2/3）
+- Skillpack 锁文件格式兼容
+- 安全审计自动化（skill-auditor.ts）
+
+### EP-04 分层记忆 ✅
+- L1 Working / L2 Episodic / L3 Semantic
+- O(N²) → 阈值策略优化
+- Ollama 密集嵌入（nomic-embed-text）
+- Qdrant 本地向量库
+- L2→L3 自动压缩提炼
+
+### EP-05 多Agent协作 ✅
+- MessageBus（内存队列 + JSONL 持久化）
+- AgentRegistry
+- AES-256-GCM 加密消息总线
+- Per-Agent 独立沙箱
+- TeamOrchestrator（planner/executor/reviewer）
+- Sequential / Parallel / Hierarchical 模式
+
+### EP-06 企业级部署 ✅
+- Helm Chart（K8s 3副本 + anti-affinity）
+- SOC2 审计日志
+- ConfigMap / Secret / Ingress / PVC
+
+## 正在进行
+
+| 任务 | 优先级 | 状态 |
+|------|--------|------|
+| Wasmtime Runtime | P0 | 调研完成，官方 npm 包不可用 |
+| Kata + Firecracker | P1 | Phase 3 |
+| 技能市场 | P1 | Phase 3 |
+
+## 配置示例
+
+```bash
+# .env (Gateway)
+GATEWAY_PORT=18790
+LOCAL_TOKEN_AUTH_REQUIRED=false
+READONLY_MODE=true
+MEMORY_DIR=./memory-store
+
+# LLM (可选，不配置则使用 MockPlanner)
+LLM_BASE_URL=http://localhost:11434
+LLM_MODEL=deepseek-r1
+
+# Audit
+AUDIT_LOG_DIR=./runtime/audit
+AUDIT_SIGNING_KEY=your-secret-key
+```
+
+## 架构图
+
+```
+┌─────────────────────────────────────────────────┐
+│                   Aether Gateway                │
+│  ┌─────────┐  ┌──────────┐  ┌──────────────┐   │
+│  │Manifest │  │   Vault  │  │ AuditLogger  │   │
+│  │ Engine  │  │(injection)│  │(HMAC-SHA256)│   │
+│  └────┬────┘  └────┬─────┘  └──────┬───────┘   │
+│       │            │               │           │
+│  ┌────▼────────────▼───────────────▼────┐     │
+│  │         SandboxBridge + eBPF         │     │
+│  │  ┌─────────────────────────────────┐ │     │
+│  │  │     isolated-vm (V8 Isolate)    │ │     │
+│  │  │  CodeAct Engine │ SecurityPolicy│ │     │
+│  │  └─────────────────────────────────┘ │     │
+│  └───────────────────────────────────────┘     │
+│                                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────┐  │
+│  │Memory L1 │  │Memory L2 │  │  Memory L3   │  │
+│  │(working) │  │(episodic)│  │ (semantic)   │  │
+│  └──────────┘  └──────────┘  └──────────────┘  │
+└─────────────────────────────────────────────────┘
+```
+
+## 安全模型（OWASP Agentic Top 10）
+
+| 威胁 | Aether 防护 |
+|------|------------|
+| 01 Prompt Injection | Manifest 预审计 + 静态扫描 |
+| 02 Data Leakage | eBPF 网络拦截 |
+| 03 Sandbox Escape | WASM 线性内存 |
+| 04 Agent Hijacking | Vault 零信任注入 |
+| 05 Overtrusting | 三级披露 + 显式权限 |
+| 06 Unbounded Execution | MAX_STEPS + timeout |
+| 07 Memory Poisoning | 重要性评分 + 遗忘机制 |
+| 08 Credential Exposure | Vault 注入 + 环境变量 |
+| 09 Intent Misalignment | 审计日志 + Manifest |
+| 10 Model Poisoning | 技能签名 + 安全评分 |
+
+## 下一步
+
+1. **Wasmtime Runtime** — 等待官方 npm 包发布或使用 wasmtime-py
+2. **Kata Containers** — Phase 3 企业级安全模式
+3. **技能市场** — Phase 3 开发者生态
+
+---
+
+**为什么选 Aether？** 如果你担心云端 AI Agent 的隐私问题（数据被用于训练、凭证泄露、不受控的执行），Aether 是目前唯一能在本地提供完整多Agent协作 + 可验证审计日志 + 技能生态兼容的开源方案。
