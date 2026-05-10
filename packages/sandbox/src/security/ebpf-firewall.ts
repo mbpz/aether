@@ -1,21 +1,21 @@
-// EP-01: eBPF Network Firewall Mock
-// 模拟内核级 eBPF XDP/TC 钩子的应用层实现
+// EP-01: eBPF Network Firewall
+// 应用层网络防火墙，模拟 eBPF XDP/TC 钩子的访问控制行为
 //
 // 真正的 eBPF 行为：
 //   1. 在内核层（XDP/TC）拦截所有网络数据包
 //   2. 根据白名单策略决定放行或丢弃
 //   3. 违规时直接在内核层丢弃，< 1ms 延迟
 //
-// 本 Mock 实现（应用层模拟）：
-//   - 在 isolated-vm 执行前后模拟网络策略检查
+// 本实现（应用层策略执行）：
+//   - 在 isolated-vm 执行前后进行网络策略检查
 //   - 记录每次连接拦截事件到审计日志
 //   - 提供连接日志可查询接口
 //   - 支持动态更新白名单（在运行时）
 //
-// 注意：由于 Node.js 无法真正 hook 内核网卡，本实现通过以下方式近似 eBPF 行为：
-//   - 执行前：检查代码中是否有网络访问模式（静态分析）
+// 注意：Node.js 无法 hook 内核网卡，本实现通过以下方式实现网络策略：
+//   - 执行前：检查代码中是否有网络访问模式（静态分析 via _extractNetworkTargets）
 //   - 执行后：检查执行结果中的网络事件（动态检测）
-//   - 两层结合，模拟 eBPF 的"运行时监控"
+//   - bridge.ts 中集成防火墙检查，在代码执行前阻止未授权的网络目标
 
 import { randomUUID } from 'crypto';
 import { EventEmitter } from 'events';
@@ -75,7 +75,7 @@ export class EbpfFirewall extends EventEmitter {
 
     // 默认规则：仅允许 localhost
     this._setDefaultRules();
-    console.log('[aether:ebpf-firewall] 🔏 eBPF Firewall initialized (mock mode)');
+    console.log('[aether:ebpf-firewall] 🔏 eBPF Firewall initialized');
     console.log(`[aether:ebpf-firewall]   defaultAction=${this.config.defaultAction}`);
     console.log(`[aether:ebpf-firewall]   logConnections=${this.config.logConnections}`);
   }

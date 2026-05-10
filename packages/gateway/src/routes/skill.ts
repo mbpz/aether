@@ -23,8 +23,9 @@ export function createSkillRouter(deps: any) {
   router.get('/:name', (req: Request, res: Response) => {
     deps.audit.log({
       action: 'skill_load',
-      source: req.ip ?? 'unknown',
-      ok: true,
+      category: 'data_access',
+      actor: { type: 'user', id: req.ip ?? 'unknown' },
+      outcome: 'success',
       detail: `Loading skill: ${req.params.name} (Level 2)`,
     });
     res.json({

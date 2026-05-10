@@ -32,8 +32,9 @@ export function createAgentRouter(deps: any) {
 
     deps.audit.log({
       action: 'agent_execute_request',
-      source: req.ip ?? 'unknown',
-      ok: validation.allowed,
+      category: 'agent_execution',
+      actor: { type: 'user', id: req.ip ?? 'unknown' },
+      outcome: validation.allowed ? 'success' : 'failure',
       detail: validation.allowed
         ? `Request ${requestId} passed manifest validation`
         : `Request ${requestId} REJECTED: ${validation.reason}`,

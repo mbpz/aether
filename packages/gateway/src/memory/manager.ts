@@ -506,7 +506,7 @@ Return ONLY the JSON array, no markdown, no explanation. Aim for 3-10 facts depe
 
         // Simple relevance filter: look for action/fact indicators
         const lower = trimmed.toLowerCase();
-        const hasAction = /(\b(built|created|decided|learned|found|completed|fixed|updated|changed|configured|deployed|tested)\b/i).test(lower);
+        const hasAction = (/(?:^|\s)(?:built|created|decided|learned|found|completed|fixed|updated|changed|configured|deployed|tested)(?:\s|$)/i).test(lower);
         const hasEntity = /[A-Z][a-zA-Z]{2,}/.test(trimmed); // capitalized word
         const isUnique = trimmed.split(/\s+/).length >= 4; // at least 4 words
 

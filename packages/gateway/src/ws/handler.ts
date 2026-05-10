@@ -25,8 +25,9 @@ export function setupWsHandler(wss: WebSocketServer, deps: any) {
 
     deps.audit.log({
       action: 'ws_connect',
-      source: ip,
-      ok: true,
+      category: 'network',
+      actor: { type: 'agent', id: ip },
+      outcome: 'success',
       detail: `Agent session ${sessionId} connected`,
     });
 
@@ -59,8 +60,9 @@ export function setupWsHandler(wss: WebSocketServer, deps: any) {
 
           deps.audit.log({
             action: 'ws_execute',
-            source: ip,
-            ok: validation.allowed,
+            category: 'agent_execution',
+            actor: { type: 'agent', id: ip },
+            outcome: validation.allowed ? 'success' : 'failure',
             detail: validation.allowed
               ? `WS execute allowed for session ${sessionId}`
               : `WS execute REJECTED: ${validation.reason}`,
@@ -89,8 +91,9 @@ export function setupWsHandler(wss: WebSocketServer, deps: any) {
 
         deps.audit.log({
           action: 'ws_unknown_message',
-          source: ip,
-          ok: false,
+          category: 'network',
+          actor: { type: 'agent', id: ip },
+          outcome: 'failure',
           detail: `Unknown message type: ${msg.type}`,
         });
 
@@ -103,8 +106,9 @@ export function setupWsHandler(wss: WebSocketServer, deps: any) {
       sessions.delete(sessionId);
       deps.audit.log({
         action: 'ws_disconnect',
-        source: ip,
-        ok: true,
+        category: 'network',
+        actor: { type: 'agent', id: ip },
+        outcome: 'success',
         detail: `Agent session ${sessionId} disconnected`,
       });
     });
@@ -112,8 +116,9 @@ export function setupWsHandler(wss: WebSocketServer, deps: any) {
     ws.on('error', (err) => {
       deps.audit.log({
         action: 'ws_error',
-        source: ip,
-        ok: false,
+        category: 'network',
+        actor: { type: 'agent', id: ip },
+        outcome: 'failure',
         detail: `Session ${sessionId} error: ${err.message}`,
       });
     });

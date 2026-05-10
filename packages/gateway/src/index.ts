@@ -80,15 +80,16 @@ async function main() {
     console.log(`[aether:gateway] 🧠 LLM Planner ready (EP-07) — configured=${llmManager.isConfigured}`);
     audit.log({
       action: 'gateway_start',
-      source: 'system',
-      ok: true,
+      category: 'system',
+      actor: { type: 'system', id: 'system' },
+      outcome: 'success',
       detail: `Gateway started on port ${PORT} with Sandbox Bridge`,
     });
   });
 
   process.on('SIGINT', () => {
     console.log('\n[aether:gateway] Shutting down...');
-    audit.log({ action: 'gateway_stop', source: 'system', ok: true, detail: 'SIGINT received' });
+    audit.log({ action: 'gateway_stop', category: 'system', actor: { type: 'system', id: 'system' }, outcome: 'success', detail: 'SIGINT received' });
     server.close(() => process.exit(0));
   });
 }

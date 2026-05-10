@@ -4,9 +4,11 @@
 import { randomUUID } from 'crypto';
 import type { MemoryManager } from '../memory/manager.js';
 import type { SandboxBridge } from '../sandbox/bridge.js';
+import type { LLMProvider } from '../llm/provider.js';
 import { ToolRegistry, createBuiltinTools } from './tools.js';
 import { MockPlanner } from './planner.js';
 import type { AgentStep } from './planner.js';
+import { LLMPlanner } from '../llm/planner.js';
 
 // ── 对外导出的类型 ─────────────────────────────────────────────────────────────
 
@@ -39,7 +41,7 @@ export interface SessionRecord {
 
 export class AgentRunner {
   private registry: ToolRegistry;
-  private planner: MockPlanner;
+  private planner: MockPlanner | LLMPlanner;
   private sessions: Map<string, SessionRecord> = new Map();
   private memory?: MemoryManager;
   private sandbox?: SandboxBridge;
@@ -47,6 +49,7 @@ export class AgentRunner {
   constructor(opts: {
     memory?: MemoryManager;
     sandbox?: SandboxBridge;
+    llm?: LLMProvider;
     maxSteps?: number;
   } = {}) {
     this.memory = opts.memory;
@@ -92,8 +95,15 @@ export class AgentRunner {
       this.registry.register(tool);
     }
 
-    this.planner = new MockPlanner(this.registry, opts.maxSteps ?? 10);
-    console.log('[aether:agent-runner] ✅ AgentRunner initialized');
+    // 使用 LLMPlanner（真实 LLM）如果提供了 llm，否则回退到 MockPlanner
+    if (opts.llm) {
+      this.planner = new LLMPlanner(opts.llm, this.registry, opts.maxSteps ?? 10);
+      console.log('[aether:agent-runner] ✅ AgentRunner initialized with LLMPlanner (real LLM)');
+    } else {
+      this.planner = new MockPlanner(this.registry, opts.maxSteps ?? 10);
+      console.log('[aether:agent-runner] ⚠️ AgentRunner initialized with MockPlanner (no LLM configured)');
+    }
+
     console.log(`[aether:agent-runner]   registered tools: ${this.registry.list().map(t => t.name).join(', ')}`);
   }
 

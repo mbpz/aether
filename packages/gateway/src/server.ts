@@ -67,8 +67,9 @@ export function createGatewayServer(deps: GatewayDeps) {
   app.use((req: Request, _res: Response, next: NextFunction) => {
     deps.audit.log({
       action: 'http_request',
-      source: req.ip ?? 'unknown',
-      ok: true,
+      category: 'network',
+      actor: { type: 'user', id: req.ip ?? 'unknown' },
+      outcome: 'success',
       detail: `${req.method} ${req.path}`,
     });
     next();
@@ -85,8 +86,9 @@ export function createGatewayServer(deps: GatewayDeps) {
       if (token !== deps.config.localToken) {
         deps.audit.log({
           action: 'auth_rejected',
-          source: req.ip ?? 'unknown',
-          ok: false,
+          category: 'authentication',
+          actor: { type: 'user', id: req.ip ?? 'unknown' },
+          outcome: 'failure',
           detail: `Unauthorized request to ${req.path}`,
         });
         res.status(401).json({ error: 'Unauthorized', code: 'INVALID_TOKEN' });
@@ -100,7 +102,7 @@ export function createGatewayServer(deps: GatewayDeps) {
   app.use('/api/agent', createAgentRouter(deps));
   app.use('/api/status', createStatusRouter(deps));
   app.use('/api/skill', createSkillRouter(deps));
-  const skillAuditRouter = createSkillAuditRouter({ registry });
+  const skillAuditRouter = createSkillAuditRouter({ registry: deps.agentRegistry });
   app.use('/api/skill/audit', skillAuditRouter);
   app.use('/api/memory', createMemoryRouter({ memory: deps.memory }));
   app.use('/api/agent-loop', createAgentLoopRouter({ agentRunner: deps.agentRunner }));
@@ -126,8 +128,9 @@ export function createGatewayServer(deps: GatewayDeps) {
     console.error('[aether:gateway] Error:', err.message);
     deps.audit.log({
       action: 'server_error',
-      source: 'internal',
-      ok: false,
+      category: 'system',
+      actor: { type: 'system', id: 'internal' },
+      outcome: 'failure',
       detail: err.message,
     });
     res.status(500).json({ error: 'Internal Server Error', message: err.message });

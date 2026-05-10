@@ -56,8 +56,8 @@ async function main() {
   return { runtime, codeact, policy, ebpf };
 }
 
-export { main };
-export type { SandboxRuntime, CodeActEngine, WasmtimeRuntime, EbpfFirewall };
+export { main, EbpfFirewall };
+export type { SandboxRuntime, CodeActEngine, WasmtimeRuntime };
 
 if (process.env.STANDALONE === 'true') {
   main().then(() => {
