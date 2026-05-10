@@ -247,8 +247,8 @@ EP-06 企业级私有部署
 | T-004 Qdrant向量库集成 | P0 | 🔄 Phase 2 |
 | T-005 Agent Team角色定义 | P1 | ✅ 完成 |
 | T-006 Skillpack格式兼容 | P1 | 🔄 待开始 |
-| T-007 Manifest+Prompt Injection测试 | P0 | 🔄 待开始 |
-| T-008 Vault凭证注入测试 | P0 | 🔄 待开始 |
+| T-007 Manifest+Prompt Injection测试 | P0 | ✅ 完成 |
+| T-008 Vault凭证注入测试 | P0 | ✅ 完成 |
 | T-009 协作流程引擎 (Sequential/Hierarchical) | P2 | 🔄 待开始 |
 
 ---
