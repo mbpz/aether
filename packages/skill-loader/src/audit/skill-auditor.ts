@@ -53,7 +53,7 @@ export class SkillSecurityAuditor {
 
   private _detectSubprocess(content: string): AuditIssue[] {
     const issues: AuditIssue[] = [];
-    for (const pattern of [/child_process\.spawn\s*\(/, /child_process\.exec\s*\(/, /execSync\s*\(/, /\.exec\s*\(['"`][^'")]*['"`]\s*\)/]) {
+    for (const pattern of [/child_process\.spawn\s*\(/, /child_process\.exec\s*\(/, /execSync\s*\(/, /\.exec\s*\(['"`]/) {
       const match = content.match(pattern);
       if (match) issues.push({ type: 'exec', severity: 'critical', location: this._getLineForMatch(content, match.index!), description: `Subprocess execution: ${match[0]}` });
     }
