@@ -330,8 +330,9 @@ export class SandboxBridge {
 
     this.audit.log({
       action: 'sandbox_exec_start',
-      source: task.source,
-      ok: true,
+      category: 'agent_execution',
+      actor: { type: 'agent', id: task.source },
+      outcome: 'success',
       detail: `Task ${taskId} running (op=${task.operation})`,
       metadata: { taskId, operation: task.operation },
     });
@@ -372,8 +373,9 @@ export class SandboxBridge {
               });
               this.audit.log({
                 action: 'sandbox_ebpf_blocked',
-                source: task.source,
-                ok: false,
+                category: 'security',
+                actor: { type: 'agent', id: task.source },
+                outcome: 'failure',
                 detail: `Task ${taskId} eBPF blocked ${target.protocol} ${target.host}:${target.port} — ${check.reason}`,
                 metadata: { taskId, target, matchedRule: check.matchedRule?.id },
               });
@@ -384,8 +386,9 @@ export class SandboxBridge {
             // 允许的也记录到审计日志
             this.audit.log({
               action: 'sandbox_ebpf_allowed',
-              source: task.source,
-              ok: true,
+              category: 'security',
+              actor: { type: 'agent', id: task.source },
+              outcome: 'success',
               detail: `Task ${taskId} eBPF allowed ${target.protocol} ${target.host}:${target.port}`,
               metadata: { taskId, target },
             });
@@ -401,8 +404,9 @@ export class SandboxBridge {
           });
           this.audit.log({
             action: 'sandbox_policy_violation',
-            source: task.source,
-            ok: false,
+            category: 'security',
+            actor: { type: 'agent', id: task.source },
+            outcome: 'failure',
             detail: violations[0].detail,
             metadata: { taskId, violations },
           });
@@ -425,8 +429,9 @@ export class SandboxBridge {
           });
           this.audit.log({
             action: 'sandbox_manifest_rejected',
-            source: task.source,
-            ok: false,
+            category: 'authorization',
+            actor: { type: 'agent', id: task.source },
+            outcome: 'failure',
             detail: `Task ${taskId} manifest validation failed: ${validation.reason}`,
             metadata: { taskId, operation: task.operation, manifestName: task.manifestName },
           });
@@ -445,8 +450,9 @@ export class SandboxBridge {
         this.queue.markDone(taskId, result);
         this.audit.log({
           action: 'sandbox_exec_done',
-          source: task.source,
-          ok: result.ok,
+          category: 'agent_execution',
+          actor: { type: 'agent', id: task.source },
+          outcome: result.ok ? 'success' : 'failure',
           detail: `Task ${taskId} ${result.ok ? 'succeeded' : 'failed'} in ${result.durationMs}ms`,
           metadata: { taskId, durationMs: result.durationMs, memoryUsedMb: result.memoryUsedMb },
         });
@@ -469,8 +475,9 @@ export class SandboxBridge {
       this.queue.markDone(taskId, { ok: false, error, durationMs: 0 });
       this.audit.log({
         action: 'sandbox_exec_error',
-        source: task.source,
-        ok: false,
+        category: 'agent_execution',
+        actor: { type: 'agent', id: task.source },
+        outcome: 'failure',
         detail: `Task ${taskId} error: ${error}`,
       });
     }
