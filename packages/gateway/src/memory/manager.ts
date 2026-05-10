@@ -35,6 +35,8 @@ export class MemoryManager {
   private vectorizer: TFIDFVectorizer;
   private semanticStore: Map<string, SemanticRecord> = new Map();
   private semanticIndexPath: string;
+  private semanticDirty = false;   // true = embeddings stale, needs full refresh
+  private static readonly SEMANTIC_REFRESH_THRESHOLD = 500;
 
   constructor(opts?: { workingWindowSize?: number; storeDir?: string }) {
     this.workingWindowSize = opts?.workingWindowSize ?? DEFAULT_WORKING_WINDOW;
@@ -245,13 +247,16 @@ export class MemoryManager {
   // ── L3 Semantic Memory 内部实现 ───────────────────────────────────────────
 
   private _writeSemantic(entry: MemoryEntry): void {
-    // 先把文档加入语料库（扩展词表）
+    // Threshold-based refresh: if store is large, defer full refresh to query time.
+    // This trades a small accuracy loss for O(N) -> O(1) per insert.
+    if (this.semanticStore.size >= MemoryManager.SEMANTIC_REFRESH_THRESHOLD) {
+      this.semanticDirty = true;
+    } else if (this.semanticStore.size > 0) {
+      // Small store: refresh all embeddings so IDF is accurate for existing docs
+      this._refreshAllEmbeddings();
+    }
+
     this.vectorizer.addDocument(entry.content);
-    
-    // 词表变化后，刷新所有现有向量
-    this._refreshAllEmbeddings();
-    
-    // 计算新条目的向量
     const embedding = this.vectorizer.vectorize(entry.content);
     const rec: SemanticRecord = {
       id: entry.id,
@@ -270,9 +275,15 @@ export class MemoryManager {
     for (const rec of this.semanticStore.values()) {
       rec.embedding = this.vectorizer.vectorize(rec.content);
     }
+    this.semanticDirty = false;
   }
 
   private _searchSemantic(query: MemoryQuery): Array<MemoryEntry & { score?: number }> {
+    // If dirty (embeddings stale due to deferred refresh), refresh now
+    if (this.semanticDirty) {
+      this._refreshAllEmbeddings();
+      this._saveSemanticIndex();
+    }
     if (!query.text || this.semanticStore.size === 0) {
       // 无文本查询：按 importance 排序返回
       return Array.from(this.semanticStore.values())
