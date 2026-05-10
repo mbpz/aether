@@ -2,7 +2,8 @@
 // 管理技能生命周期，实现三级渐进式加载
 
 import { readdir, stat } from 'fs/promises';
-import { join, extname } from 'path';
+import { readFileSync } from 'fs';
+import { join, extname, dirname } from 'path';
 import { SkillParser, Skill, SkillMetadata } from '../parser/skill-parser.js';
 
 export class SkillRegistry {
@@ -35,7 +36,9 @@ export class SkillRegistry {
 
   private async tryLoadSkill(filePath: string): Promise<number> {
     try {
-      const skill = this.parser.parseFromFile(filePath);
+      const content = readFileSync(filePath, 'utf-8');
+      const lockDir = dirname(filePath);
+      const skill = this.parser.parseFromContent(content, 'unknown', lockDir);
       this.register(skill);
       return 1;
     } catch {
