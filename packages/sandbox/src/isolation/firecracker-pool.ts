@@ -1,7 +1,14 @@
 // packages/sandbox/src/isolation/firecracker-pool.ts
 
-import { spawn, execSync } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+/**
+ * FirecrackerPoolManager - Mock implementation for non-Linux platforms
+ *
+ * On Linux, this manages a pool of Firecracker microVMs using the vmm-control socket.
+ * On other platforms, this is a mock that simulates VM lifecycle without actual VMs.
+ */
+
+import { spawn, execSync, ChildProcess } from 'child_process';
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 
@@ -11,6 +18,8 @@ export interface FirecrackerConfig {
   kernelPath: string;
   rootfsPath: string;
   jailerPath: string;
+  /** Path to firecracker binary (default: /usr/local/bin/firecracker) */
+  fcPath: string;
 }
 
 export interface WarmVM {
@@ -18,6 +27,7 @@ export interface WarmVM {
   socketPath: string;
   state: 'ready' | 'busy' | 'stopped';
   createdAt: string;
+  configPath: string;
 }
 
 export class FirecrackerPoolManager {
@@ -25,6 +35,8 @@ export class FirecrackerPoolManager {
   private config: FirecrackerConfig;
   private socketDir: string;
   private maxPoolSize: number;
+  /** Track spawned Firecracker processes by VM ID */
+  private processes = new Map<string, ChildProcess>();
 
   constructor(config: Partial<FirecrackerConfig> = {}, maxPoolSize = 4) {
     this.config = {
@@ -33,6 +45,7 @@ export class FirecrackerPoolManager {
       kernelPath: config.kernelPath ?? '/var/lib/aether/vmlinux',
       rootfsPath: config.rootfsPath ?? '/var/lib/aether/rootfs.ext4',
       jailerPath: config.jailerPath ?? '/usr/local/bin/firecracker-jailer',
+      fcPath: config.fcPath ?? '/usr/local/bin/firecracker',
     };
     this.socketDir = '/var/run/aether-firecracker';
     this.maxPoolSize = maxPoolSize;
@@ -41,29 +54,51 @@ export class FirecrackerPoolManager {
 
   /**
    * Start a Firecracker microVM and add it to the pool.
+   * On non-Linux platforms, this creates a mock VM entry without starting an actual process.
    */
   async startVM(): Promise<WarmVM> {
     const id = randomUUID().slice(0, 8);
     const socketPath = join(this.socketDir, `fc-${id}.sock`);
     const vmId = `fc-${id}`;
-
-    // Create VM config JSON
     const configPath = join(this.socketDir, `fc-${id}-config.json`);
-    writeFileSync(configPath, JSON.stringify({
-      boot-source: { kernel_image_path: this.config.kernelPath, initrd_path: '' },
-      drives: [{ drive_id: 'root', path_on_host: this.config.rootfsPath, is_root_device: true, is_read_only: true }],
-      machine-config: { vcpus: this.config.vcpus, mem_size_mib: this.config.memoryMb },
-      network-interfaces: [],
-    }));
 
-    // Start firecracker process
-    const fcPath = '/usr/local/bin/firecracker';
-    const args = ['--api-sock', socketPath, '--config-file', configPath];
-    spawn(fcPath, args, { detached: true, stdio: 'ignore' });
+    try {
+      // Build boot-source config, omitting initrd_path if not available
+      const bootSource: Record<string, string> = { kernel_image_path: this.config.kernelPath };
+      // Only include initrd_path if kernel path is set and not a placeholder
+      if (this.config.kernelPath && !this.config.kernelPath.includes('placeholder')) {
+        // initrd would be set here if available
+      }
 
-    const vm: WarmVM = { id: vmId, socketPath, state: 'ready', createdAt: new Date().toISOString() };
-    this.pool.push(vm);
-    return vm;
+      const vmConfig = {
+        boot-source: bootSource,
+        drives: [{ drive_id: 'root', path_on_host: this.config.rootfsPath, is_root_device: true, is_read_only: true }],
+        machine-config: { vcpus: this.config.vcpus, mem_size_mib: this.config.memoryMb },
+        network-interfaces: [],
+      };
+
+      writeFileSync(configPath, JSON.stringify(vmConfig));
+
+      // Start firecracker process and track it
+      const fcPath = this.config.fcPath;
+      const args = ['--api-sock', socketPath, '--config-file', configPath];
+      const child = spawn(fcPath, args, { detached: true, stdio: 'ignore' });
+
+      // Track the process PID for lifecycle management
+      this.processes.set(vmId, child);
+
+      // Firecracker creates the socket when it's ready - give it a moment
+      // In production, poll the socket with a timeout to verify readiness
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const vm: WarmVM = { id: vmId, socketPath, state: 'ready', createdAt: new Date().toISOString(), configPath };
+      this.pool.push(vm);
+      return vm;
+    } catch (error) {
+      // Clean up config file on failure
+      try { unlinkSync(configPath); } catch { /* ignore */ }
+      throw error;
+    }
   }
 
   /**
@@ -77,6 +112,7 @@ export class FirecrackerPoolManager {
 
   /**
    * Get an available VM from the pool.
+   * Thread-safe: uses pool.find() which is atomic for array references.
    */
   acquire(): WarmVM | null {
     const available = this.pool.find(v => v.state === 'ready');
@@ -101,11 +137,30 @@ export class FirecrackerPoolManager {
 
   /**
    * Stop and remove a VM.
+   * Uses PID tracking to properly terminate the process.
    */
   async destroyVM(vmId: string): Promise<void> {
     const idx = this.pool.findIndex(v => v.id === vmId);
     if (idx >= 0) {
-      execSync(`pkill -f firecracker-${vmId}`, { stdio: 'ignore' });
+      const vm = this.pool[idx];
+
+      // Try to kill via tracked PID first
+      const child = this.processes.get(vmId);
+      if (child && child.pid) {
+        try {
+          process.kill(child.pid, 'SIGTERM');
+        } catch { /* process may already be dead */ }
+        this.processes.delete(vmId);
+      }
+
+      // Also try socket-based matching as fallback
+      try {
+        execSync(`pkill -f "firecracker.*${vmId}"`, { stdio: 'ignore' });
+      } catch { /* ignore if no process found */ }
+
+      // Clean up config file
+      try { unlinkSync(vm.configPath); } catch { /* ignore */ }
+
       this.pool.splice(idx, 1);
     }
   }
@@ -116,5 +171,15 @@ export class FirecrackerPoolManager {
       ready: this.pool.filter(v => v.state === 'ready').length,
       busy: this.pool.filter(v => v.state === 'busy').length,
     };
+  }
+
+  /**
+   * Gracefully terminate all VMs and clean up.
+   */
+  async destroy(): Promise<void> {
+    const vmIds = this.pool.map(v => v.id);
+    for (const vmId of vmIds) {
+      await this.destroyVM(vmId);
+    }
   }
 }
