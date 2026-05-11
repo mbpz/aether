@@ -37,6 +37,8 @@ export class FirecrackerPoolManager {
   private maxPoolSize: number;
   /** Track spawned Firecracker processes by VM ID */
   private processes = new Map<string, ChildProcess>();
+  /** Mutex flag to prevent race condition in acquire() */
+  private acquiring = false;
 
   constructor(config: Partial<FirecrackerConfig> = {}, maxPoolSize = 4) {
     this.config = {
@@ -57,6 +59,9 @@ export class FirecrackerPoolManager {
    * On non-Linux platforms, this creates a mock VM entry without starting an actual process.
    */
   async startVM(): Promise<WarmVM> {
+    if (this.pool.length >= this.maxPoolSize) {
+      throw new Error(`Pool exhausted: ${this.pool.length}/${this.maxPoolSize} VMs active`);
+    }
     const id = randomUUID().slice(0, 8);
     const socketPath = join(this.socketDir, `fc-${id}.sock`);
     const vmId = `fc-${id}`;
@@ -83,13 +88,21 @@ export class FirecrackerPoolManager {
       const fcPath = this.config.fcPath;
       const args = ['--api-sock', socketPath, '--config-file', configPath];
       const child = spawn(fcPath, args, { detached: true, stdio: 'ignore' });
+      child.unref(); // Detach from parent process so child can outlive parent
 
       // Track the process PID for lifecycle management
       this.processes.set(vmId, child);
 
-      // Firecracker creates the socket when it's ready - give it a moment
-      // In production, poll the socket with a timeout to verify readiness
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Firecracker creates the socket when it's ready - poll until socket exists or timeout
+      const timeoutMs = 5000;
+      const intervalMs = 100;
+      const startTime = Date.now();
+      while (!existsSync(socketPath)) {
+        if (Date.now() - startTime > timeoutMs) {
+          throw new Error(`Firecracker socket ${socketPath} not created within ${timeoutMs}ms`);
+        }
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+      }
 
       const vm: WarmVM = { id: vmId, socketPath, state: 'ready', createdAt: new Date().toISOString(), configPath };
       this.pool.push(vm);
@@ -112,19 +125,26 @@ export class FirecrackerPoolManager {
 
   /**
    * Get an available VM from the pool.
-   * Thread-safe: uses pool.find() which is atomic for array references.
+   * Thread-safe: uses mutex flag to prevent race condition in find+mutate.
    */
   acquire(): WarmVM | null {
-    const available = this.pool.find(v => v.state === 'ready');
-    if (available) {
-      available.state = 'busy';
-      return available;
+    // Mutex lock to prevent race condition
+    if (this.acquiring) return null;
+    this.acquiring = true;
+    try {
+      const available = this.pool.find(v => v.state === 'ready');
+      if (available) {
+        available.state = 'busy';
+        return available;
+      }
+      if (this.pool.length < this.maxPoolSize) {
+        const vm = this.pool.find(v => v.state === 'stopped');
+        if (vm) { vm.state = 'busy'; return vm; }
+      }
+      return null;
+    } finally {
+      this.acquiring = false;
     }
-    if (this.pool.length < this.maxPoolSize) {
-      const vm = this.pool.find(v => v.state === 'stopped');
-      if (vm) { vm.state = 'busy'; return vm; }
-    }
-    return null;
   }
 
   /**
