@@ -30,7 +30,7 @@ export class RemoteWasmClient {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req),
-        signal: controller.signal as any,
+        signal: controller.signal,
       });
 
       clearTimeout(timer);
