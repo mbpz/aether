@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: aether-ebpf-agent
+  namespace: aether
+  labels:
+    app: aether-ebpf-agent
+spec:
+  selector:
+    matchLabels:
+      app: aether-ebpf-agent
+  template:
+    metadata:
+      labels:
+        app: aether-ebpf-agent
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: ebpf-agent
+          image: aether/ebpf-agent:latest
+          env:
+            - name: NETWORK_INTERFACE
+              value: "eth0"
+            - name: EBPF_POLICY_PATH
+              value: "/etc/aether/ebpf-policy.yaml"
+            - name: EBPF_LOG_PATH
+              value: "/var/log/aether/ebpf.log"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+            - name: policy
+              mountPath: /etc/aether
+            - name: log
+              mountPath: /var/log/aether
+          resources:
+            limits:
+              memory: 128Mi
+              cpu: 500m
+      volumes:
+        - name: bpffs
+          hostPath:
+            path: /sys/fs/bpf
+            type: DirectoryOrCreate
+        - name: policy
+          configMap:
+            name: aether-ebpf-policy
+        - name: log
+          hostPath:
+            path: /var/log/aether
+            type: DirectoryOrCreate
