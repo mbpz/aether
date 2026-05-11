@@ -1,9 +1,13 @@
 // Aether Sandbox - WASM 隔离执行层入口
 // EP-01: Secure Sandbox Execution Layer
+// EP-06: MicroVM 高安全模式 (T-017)
 
 import 'dotenv/config';
 import { SandboxRuntime } from './runtime/sandbox.js';
 import { WasmtimeRuntime } from './runtime/wasm-runtime.js';
+import { MicroVMRuntime, MicroVMConfig, MicroVMResult, MicroVMExecutionResult } from './runtime/microvm-runtime.js';
+import { FirecrackerRuntime } from './runtime/firecracker-runtime.js';
+import { KataRuntime } from './runtime/kata-runtime.js';
 import { SecurityPolicy } from './security/policy.js';
 import { EbpfFirewall } from './security/ebpf-firewall.js';
 import { CodeActEngine } from './codeact/engine.js';
@@ -57,7 +61,18 @@ async function main() {
 }
 
 export { main, EbpfFirewall };
-export type { SandboxRuntime, CodeActEngine, WasmtimeRuntime };
+export type {
+  SandboxRuntime,
+  CodeActEngine,
+  WasmtimeRuntime,
+  // MicroVM runtime (T-017: Kata + Firecracker 高安全模式)
+  MicroVMRuntime,
+  MicroVMConfig,
+  MicroVMResult,
+  MicroVMExecutionResult,
+  FirecrackerRuntime,
+  KataRuntime,
+};
 
 if (process.env.STANDALONE === 'true') {
   main().then(() => {
