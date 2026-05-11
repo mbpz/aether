@@ -25,6 +25,10 @@ export type { AuditReport, AuditIssue, AuditConfig, IssueType, IssueSeverity } f
 export { SecurityScorer, scoreSecurity } from './audit/security-scorer.js';
 export type { SecurityScore, SecurityFlag, ScorerConfig } from './audit/security-scorer.js';
 
+// Review Workflow (审核工作流)
+export { ReviewWorkflow, ReviewWorkflowError } from './review-workflow.js';
+export type { ReviewSubmission, ReviewComment, ReviewStatus } from './review-workflow.js';
+
 // Format utilities
 export { detectFormat } from './format-detector.js';
 export type { SkillFormat, FormatDetectionResult } from './format-detector.js';
