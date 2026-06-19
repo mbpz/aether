@@ -54,12 +54,39 @@ export function createGatewayServer(deps: GatewayDeps) {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true }));
 
-  // CORS（允许本地 UI 访问）
-  app.use((_req: Request, res: Response, next: NextFunction) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (_req.method === 'OPTIONS') { res.sendStatus(204); return; }
+  // CORS: same-origin by default. The browser will already block
+  // cross-origin reads of the bearer token, but we make it explicit by
+  // never sending `Access-Control-Allow-Origin: *` together with the
+  // `Authorization` header (which would also be rejected by browsers, but
+  // some non-browser clients honor it).
+  //
+  // Operators that need cross-origin access (e.g. a UI served from a
+  // different origin) must set CORS_ALLOWED_ORIGINS to a comma-separated
+  // list of origins. We then echo the exact Origin back and allow the
+  // Authorization header. A missing/empty env var means NO cross-origin
+  // access is permitted, which is the safe default.
+  const CORS_ALLOWED_ORIGINS = new Set(
+    (process.env.CORS_ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+  );
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const origin = req.headers.origin;
+    if (origin && CORS_ALLOWED_ORIGINS.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      // Only allow Authorization when the origin is explicitly trusted.
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Max-Age', '600');
+    } else if (origin) {
+      // Origin present but not in allowlist: send a static, non-wildcard
+      // header that matches no real origin. This still answers preflight
+      // but the browser will reject the response.
+      res.setHeader('Vary', 'Origin');
+    }
+    if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
     next();
   });
 

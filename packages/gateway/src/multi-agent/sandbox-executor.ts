@@ -120,7 +120,14 @@ export class AgentSandboxExecutor {
     }
 
     if (!this.ivm) {
-      return this.executeFallback(code, opts, startTime, stdout, stderr);
+      return {
+        ok: false,
+        error:
+          'isolated-vm runtime is not available; refusing to execute code ' +
+          'in an unsafe fallback. Install the optional isolated-vm native ' +
+          'binding before running agent code.',
+        durationMs: Date.now() - startTime,
+      };
     }
 
     // 创建独立的 V8 Isolate（每个 Agent 独立实例）
@@ -182,29 +189,6 @@ export class AgentSandboxExecutor {
     } finally {
       try { isolate.dispose(); } catch { /* already disposed */ }
     }
-  }
-
-  private executeFallback(code: string, opts: any, startTime: number, stdout: string[], stderr: string[]): Promise<IsolatedResult> {
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        resolve({ ok: false, error: `Execution timed out after ${this.config.maxExecTimeMs}ms`, durationMs: Date.now() - startTime });
-      }, this.config.maxExecTimeMs);
-
-      try {
-        const safeConsole = {
-          log: (...args: unknown[]) => stdout.push(args.map(String).join(' ')),
-          error: (...args: unknown[]) => stderr.push(args.map(String).join(' ')),
-          warn: (...args: unknown[]) => stdout.push('[warn] ' + args.map(String).join(' ')),
-        };
-        const fn = new Function('__console__', '__input__', `"use strict";\nconst console = __console__;\nconst input = __input__;\n(${code})`);
-        const output = fn(safeConsole, opts.input ?? null);
-        clearTimeout(timer);
-        resolve({ ok: true, output, stdout: stdout.join('\n'), stderr: stderr.join('\n'), durationMs: Date.now() - startTime });
-      } catch (err) {
-        clearTimeout(timer);
-        resolve({ ok: false, error: err instanceof Error ? err.message : String(err), stdout: stdout.join('\n'), stderr: stderr.join('\n'), durationMs: Date.now() - startTime });
-      }
-    }) as Promise<IsolatedResult>;
   }
 
   dispose(): void {

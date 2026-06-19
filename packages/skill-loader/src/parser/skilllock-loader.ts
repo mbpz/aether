@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'fs';
+import { safeJsonParse } from './safe-json.js';
 import { join } from 'path';
 import { createHash } from 'crypto';
 import { SkillpackLock, SkillpackEntry } from './skilllock-types.js';
@@ -15,7 +16,7 @@ export class SkillpackLockLoader {
     }
     try {
       const raw = readFileSync(lockPath, 'utf-8');
-      const parsed = JSON.parse(raw);
+      const parsed = safeJsonParse<Record<string, any>>(raw);
       if (!parsed.version || !parsed.resolved) {
         throw new Error('Invalid lock file: missing version or resolved');
       }

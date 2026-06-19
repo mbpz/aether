@@ -3,6 +3,7 @@
 // Provides submission, review, and approval workflow for community plugins
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { safeJsonParse } from './parser/safe-json.js';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { SecurityScorer, SecurityScore } from './audit/security-scorer.js';
@@ -82,7 +83,7 @@ export class ReviewWorkflow {
         for (const line of lines) {
           if (line.trim()) {
             try {
-              const submission = JSON.parse(line) as ReviewSubmission;
+              const submission = safeJsonParse(line) as ReviewSubmission;
               this.submissions.set(submission.id, submission);
             } catch {
               // Skip invalid JSON lines

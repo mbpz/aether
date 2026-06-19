@@ -5,7 +5,7 @@
 import { randomUUID } from 'crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { EphemeralKeyManager, encryptPayload, decryptPayload, type EncryptedPayload } from './crypto.js';
+import { EphemeralKeyManager, encryptPayload, decryptPayload, type EncryptedPayload, type SessionKey } from './crypto.js';
 
 // ── 类型定义 ─────────────────────────────────────────────────────────────────
 
@@ -33,18 +33,33 @@ export class MessageBus {
   /** agentId → 事件订阅回调 */
   private subscribers = new Map<string, MessageHandler>();
 
+  /** agentId → keyId 反向索引，避免每次按 keyId 扫描全表 */
+  private agentKeyIndex = new Map<string, string>();
+
   /** agentId → 会话密钥（每个 Agent 独立密钥） */
   private keyManager: EphemeralKeyManager;
 
   /** JSONL 持久化路径 */
   private busFilePath: string;
 
-  constructor(opts: { busFilePath?: string; keyManager?: EphemeralKeyManager } = {}) {
+  /**
+   * When true (the default), every `publish` call without a sender key
+   * is rejected. This prevents the previous footgun where the bus would
+   * silently downgrade to plaintext if the caller forgot to pass a key.
+   */
+  private requireSenderKey: boolean;
+
+  constructor(opts: {
+    busFilePath?: string;
+    keyManager?: EphemeralKeyManager;
+    requireSenderKey?: boolean;
+  } = {}) {
     const defaultPath = resolve(process.cwd(), '.agent-workspace/bus.jsonl');
     this.busFilePath = opts.busFilePath ?? defaultPath;
     this.keyManager = opts.keyManager ?? new EphemeralKeyManager();
+    this.requireSenderKey = opts.requireSenderKey ?? true;
     this._ensureDir();
-    console.log(`[aether:message-bus] ✅ MessageBus initialized (persist: ${this.busFilePath})`);
+    console.log(`[aether:message-bus] ✅ MessageBus initialized (persist: ${this.busFilePath}, requireSenderKey=${this.requireSenderKey})`);
   }
 
   /**
@@ -52,18 +67,17 @@ export class MessageBus {
    */
   createSession(agentId: string): string {
     const key = this.keyManager.createSession(agentId);
+    this.agentKeyIndex.set(agentId, key.keyId);
     return key.keyId;
   }
 
   /**
    * 获取指定 Agent 的活跃密钥
    */
-  getSessionKey(agentId: string): ReturnType<EphemeralKeyManager['getKey']> {
-    // 遍历查找（简化实现，生产中可用 agentId→keyId 映射）
-    for (const key of this.keyManager['keys'].values()) {
-      if (key.agentId === agentId) return key;
-    }
-    return null;
+  getSessionKey(agentId: string): SessionKey | null {
+    const keyId = this.agentKeyIndex.get(agentId);
+    if (!keyId) return null;
+    return this.keyManager.getKey(keyId);
   }
 
   /**
@@ -77,8 +91,14 @@ export class MessageBus {
 
   /**
    * 发布消息
-   * @param msg 要发布的消息（payload 可选加密）
-   * @param encryptPayloadsByKey 发送方 agentId → SessionKey 映射，用于加密
+   *
+   * The sender is required to have an active session key unless the bus
+   * was explicitly constructed with `requireSenderKey: false`. When a
+   * sender key is available, the payload is encrypted in-place before
+   * being persisted and queued, so plaintext never hits disk or memory.
+   *
+   * @throws if the bus requires a sender key and the caller did not pass
+   *         one (directly or via the `from` field).
    */
   publish(
     msg: Omit<Message, 'id' | 'timestamp' | 'encrypted'> & {
@@ -86,8 +106,23 @@ export class MessageBus {
       timestamp?: string;
       encrypted?: boolean;
     },
-    senderKey?: ReturnType<EphemeralKeyManager['getKey']>
+    senderKey?: SessionKey
   ): Message {
+    // Resolve the effective key: explicit argument wins, otherwise look up
+    // by `from` agentId. Either way we fail fast when no key is available
+    // and the bus is in strict mode.
+    let effectiveKey: SessionKey | null = senderKey ?? null;
+    if (!effectiveKey && msg.from && msg.from !== 'orchestrator') {
+      effectiveKey = this.getSessionKey(msg.from);
+    }
+
+    if (!effectiveKey && this.requireSenderKey) {
+      throw new Error(
+        `MessageBus.publish: refusing to send ${msg.type} from '${msg.from}' to '${msg.to}' ` +
+        `without an active session key. Call createSession(agentId) first or pass an explicit key.`,
+      );
+    }
+
     const full: Message = {
       id: msg.id ?? randomUUID(),
       from: msg.from,
@@ -98,12 +133,19 @@ export class MessageBus {
       encrypted: false,
     };
 
-    // 如果发送方有密钥且 payload 未加密，则加密之
-    if (senderKey && !msg.encrypted && msg.payload !== null) {
-      const encrypted = encryptPayload(msg.payload, senderKey);
+    // If we have a key and the payload is not already encrypted, encrypt
+    // it now. `null` payloads are kept as-is (control messages that carry
+    // no information besides the envelope).
+    if (effectiveKey && !msg.encrypted && msg.payload !== null && msg.payload !== undefined) {
+      const encrypted = encryptPayload(msg.payload, effectiveKey);
       full.payload = encrypted;
       full.encrypted = true;
-      full.keyId = senderKey.keyId;
+      full.keyId = effectiveKey.keyId;
+    } else if (msg.encrypted) {
+      // Caller explicitly marked the payload as already encrypted; copy
+      // the keyId through so receivers can decrypt.
+      full.encrypted = true;
+      if (msg.keyId) full.keyId = msg.keyId;
     }
 
     // 路由到收件人队列
@@ -125,7 +167,7 @@ export class MessageBus {
     this._persist(full);
 
     console.log(
-      `[aether:message-bus] 📨 ${full.from} → ${full.to} [${full.type}] encrypted=${full.encrypted} id=${full.id}`
+      `[aether:message-bus] 📨 ${full.from} → ${full.to} [${full.type}] encrypted=${full.encrypted} id=${full.id}`,
     );
     return full;
   }
@@ -138,18 +180,30 @@ export class MessageBus {
     const queue = this.queues.get(agentId) ?? [];
     const msgs = queue.splice(0, limit);
 
-    // 尝试解密每条消息
+    // The bus holds session keys for every participant, not just the
+    // receiver. To decrypt a message we look up the *sender's* key by
+    // the keyId carried in the envelope. This is what allows the
+    // AES-GCM layer to actually authenticate the sender.
     for (const msg of msgs) {
-      if (msg.encrypted && msg.payload) {
-        const recipientKey = this.getSessionKey(agentId);
-        if (recipientKey) {
-          try {
-            msg.payload = decryptPayload(msg.payload as EncryptedPayload, recipientKey);
-            msg.encrypted = false;
-          } catch (err) {
-            console.warn(`[aether:message-bus] Decryption failed for message ${msg.id}:`, err instanceof Error ? err.message : String(err));
-          }
-        }
+      if (!msg.encrypted || !msg.payload) continue;
+      const senderKey = msg.keyId ? this.keyManager.getKey(msg.keyId) : null;
+      if (!senderKey) {
+        console.warn(
+          `[aether:message-bus] Cannot decrypt message ${msg.id} for ${agentId}: ` +
+          `sender key ${msg.keyId ?? '<none>'} not in keyManager (expired or unknown)`,
+        );
+        continue;
+      }
+      try {
+        msg.payload = decryptPayload(msg.payload as EncryptedPayload, senderKey);
+        msg.encrypted = false;
+      } catch (err) {
+        console.warn(
+          `[aether:message-bus] Decryption failed for message ${msg.id} (likely tampered or wrong sender key):`,
+          err instanceof Error ? err.message : String(err),
+        );
+        // Leave the payload encrypted; the caller can drop or surface
+        // the error. We do NOT silently fall back to plaintext.
       }
     }
 
@@ -184,6 +238,7 @@ export class MessageBus {
    * 会话结束：销毁 Agent 的所有密钥
    */
   endSession(agentId: string): number {
+    this.agentKeyIndex.delete(agentId);
     return this.keyManager.revokeAgentKeys(agentId);
   }
 

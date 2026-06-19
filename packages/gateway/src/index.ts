@@ -23,6 +23,17 @@ const LOCAL_TOKEN = process.env.LOCAL_API_TOKEN ?? '';
 const LOCAL_TOKEN_REQUIRED = process.env.LOCAL_TOKEN_AUTH_REQUIRED === 'true';
 const READONLY_MODE = process.env.READONLY_MODE !== 'false'; // 默认只读
 
+// Fail-closed: if the operator enabled token auth we must have a non-empty
+// token. Boot would otherwise serve every request as 401, which is a worse
+// failure mode than refusing to start.
+if (LOCAL_TOKEN_REQUIRED && LOCAL_TOKEN.length === 0) {
+  console.error(
+    '[aether:gateway] FATAL: LOCAL_TOKEN_AUTH_REQUIRED=true but LOCAL_API_TOKEN ' +
+    'is empty. Refusing to start with auth enabled and no token configured.',
+  );
+  process.exit(2);
+}
+
 export const config = {
   port: PORT,
   localToken: LOCAL_TOKEN,

@@ -80,6 +80,51 @@ export interface RetentionResult {
 
 // ── Audit Logger ──────────────────────────────────────────────────────────────
 
+
+// Resolve the audit-log signing key with strict fail-closed semantics.
+//
+// Resolution order:
+//   1. `options.signingKey` if explicitly passed (used by tests and
+//      embedded deployments that already have a managed secret).
+//   2. `AUDIT_SIGNING_KEY` env var if non-empty.
+//   3. `AUDIT_SIGNING_KEY_FILE` env var pointing to a file containing
+//      the raw key bytes (truncated at the first NUL or newline).
+//
+// If none of the above produce a non-empty key, the constructor throws.
+// The previous behaviour of falling back to the literal string
+// "default-signing-key" silently disabled tamper-detection and has been
+// removed. Operators MUST now configure a key, or the gateway refuses to
+// start.
+function resolveSigningKey(explicit: string | undefined): Buffer {
+  const candidates: Array<string | undefined> = [explicit];
+  if (process.env.AUDIT_SIGNING_KEY && process.env.AUDIT_SIGNING_KEY.length > 0) {
+    candidates.push(process.env.AUDIT_SIGNING_KEY);
+  }
+  const filePath = process.env.AUDIT_SIGNING_KEY_FILE;
+  if (filePath && filePath.length > 0) {
+    try {
+      const fs = require('fs') as typeof import('fs');
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const trimmed = raw.split(/[\r\n\0]/, 1)[0] ?? '';
+      candidates.push(trimmed);
+    } catch (err) {
+      // fall through to the final missing-key check below; the error is
+      // surfaced as part of the diagnostic message.
+      candidates.push(undefined);
+    }
+  }
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.length >= 32) {
+      return Buffer.from(c, 'utf-8');
+    }
+  }
+  throw new Error(
+    'AuditLogger: no signing key configured. Set AUDIT_SIGNING_KEY (>=32 chars) ' +
+    'or AUDIT_SIGNING_KEY_FILE, or pass `signingKey` to the constructor. ' +
+    'Refusing to start because HMAC chain integrity would be disabled.',
+  );
+}
+
 export class AuditLogger {
   private logDir: string;
   private buffer: AuditRecord[] = [];
@@ -99,8 +144,8 @@ export class AuditLogger {
     retentionPolicy?: Partial<RetentionPolicy>;
   }) {
     this.logDir = options?.logDir ?? process.env.AUDIT_LOG_DIR ?? './runtime/audit';
-    const key = options?.signingKey ?? process.env.AUDIT_SIGNING_KEY ?? 'default-signing-key';
-    this.signingKey = Buffer.from(key, 'utf-8');
+    const resolvedKey = resolveSigningKey(options?.signingKey);
+    this.signingKey = resolvedKey;
     this.retentionPolicy = {
       maxAgeDays: options?.retentionPolicy?.maxAgeDays ?? this.DEFAULT_RETENTION_DAYS,
       maxFileSizeMB: options?.retentionPolicy?.maxFileSizeMB ?? this.DEFAULT_MAX_FILE_SIZE_MB,
@@ -250,9 +295,12 @@ export class AuditLogger {
 
   /**
    * 查询审计日志（内存中的最近记录）
+   * `limit` is clamped to [1, MAX_RECENT] to bound memory and payload size.
    */
+  static readonly MAX_RECENT = 500;
   recent(limit = 50): AuditRecord[] {
-    return this.buffer.slice(-limit);
+    const safe = Math.min(Math.max(Math.floor(limit) || 50, 1), AuditLogger.MAX_RECENT);
+    return this.buffer.slice(-safe);
   }
 
   /**

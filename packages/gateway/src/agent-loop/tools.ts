@@ -69,14 +69,16 @@ export function createBuiltinTools(deps: BuiltinToolDeps = {}): Tool[] {
       if (deps.execCode) {
         return deps.execCode(code);
       }
-      // 降级：简单 eval（仅用于测试）
-      try {
-        // eslint-disable-next-line no-new-func
-        const result = new Function(code)();
-        return { ok: true, output: result };
-      } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : String(err) };
-      }
+      // 无沙箱后端：拒绝执行任意 JS，避免使用 `new Function` 之类的主机级
+      // 求值路径绕过 zero-trust 契约。`execCode` 应当指向真正的沙箱实现
+      // (isolated-vm / WASM runtime)。
+      return {
+        ok: false,
+        error:
+          'No sandbox backend is wired into the agent-loop. The exec_code ' +
+          'tool requires a real sandbox (isolated-vm or WASM runtime) and ' +
+          'cannot fall back to unsafe JS evaluation.',
+      };
     },
   };
 

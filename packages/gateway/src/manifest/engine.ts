@@ -35,6 +35,95 @@ export interface ManifestValidationResult {
   manifest?: PermissionManifest;
 }
 
+/**
+ * Check whether a target hostname/URL is permitted by an entry in
+ * `allowedHosts`. Entry syntax:
+ *   - exact host:   `api.openai.com`
+ *   - exact IP:     `10.0.0.1`
+ *   - IPv4 CIDR:    `10.0.0.0/8`
+ *   - domain suffix: `*.openai.com`  (matches `api.openai.com` but NOT
+ *                                       `openai.com.evil.example` or
+ *                                       `evil-openai.com`)
+ *
+ * The function deliberately avoids `String.includes`, which would let
+ * attackers bypass the allowlist with names like
+ * `evil-127.0.0.1.attacker.com`.
+ */
+export function hostMatchesAllowlist(target: string, allowed: string[]): boolean {
+  if (allowed.length === 0) return false;
+
+  // Extract hostname from a URL or use the value directly if it is already
+  // a bare hostname/IP. We lowercase the result so case mismatches don't
+  // become an evasion vector.
+  const lowerTarget = target.trim().toLowerCase();
+  let hostname = lowerTarget;
+  try {
+    // URL parsing requires a scheme; prepend one if missing so bare hosts
+    // still parse.
+    const candidate = lowerTarget.includes('://') ? lowerTarget : `http://${lowerTarget}`;
+    const u = new URL(candidate);
+    hostname = u.hostname.toLowerCase();
+  } catch {
+    // Not a parseable URL; treat the whole string as the host literal.
+  }
+
+  for (const rawEntry of allowed) {
+    const entry = rawEntry.trim().toLowerCase();
+    if (entry.length === 0) continue;
+
+    // Domain-suffix match: `*.example.com`
+    if (entry.startsWith('*.')) {
+      const suffix = entry.slice(2);
+      if (suffix.length === 0) continue;
+      // Must be a suffix of the hostname AND separated by a dot boundary
+      // (so `*.example.com` does not match `evil-example.com`).
+      if (hostname === suffix) continue; // bare apex is not a sub-domain
+      if (hostname.endsWith('.' + suffix)) return true;
+      continue;
+    }
+
+    // IPv4 CIDR: `10.0.0.0/8`
+    if (entry.includes('/')) {
+      if (ipv4InCidr(hostname, entry)) return true;
+      continue;
+    }
+
+    // IPv4 single address
+    if (isIPv4(hostname) && isIPv4(entry) && hostname === entry) return true;
+
+    // Exact host match (lowercased, no suffix/prefix tricks).
+    if (hostname === entry) return true;
+  }
+
+  return false;
+}
+
+function isIPv4(s: string): boolean {
+  const parts = s.split('.');
+  if (parts.length !== 4) return false;
+  for (const p of parts) {
+    if (!/^\d+$/.test(p)) return false;
+    const n = Number(p);
+    if (n < 0 || n > 255) return false;
+  }
+  return true;
+}
+
+function ipv4ToInt(s: string): number {
+  const parts = s.split('.').map(Number);
+  return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+}
+
+function ipv4InCidr(ip: string, cidr: string): boolean {
+  const [base, prefixStr] = cidr.split('/');
+  if (!isIPv4(ip) || !isIPv4(base)) return false;
+  const prefix = Number(prefixStr);
+  if (!Number.isFinite(prefix) || prefix < 0 || prefix > 32) return false;
+  if (prefix === 0) return true;
+  const mask = (~0 << (32 - prefix)) >>> 0;
+  return (ipv4ToInt(ip) & mask) === (ipv4ToInt(base) & mask);
+}
+
 export class ManifestEngine {
   private manifests: Map<string, PermissionManifest> = new Map();
   private defaultManifest: PermissionManifest = {
@@ -107,7 +196,7 @@ export class ManifestEngine {
       // 检查目标主机
       if (request.target && manifest.network?.blockExternal) {
         const allowedHosts = manifest.network.allowedHosts ?? [];
-        const isAllowed = allowedHosts.some((h) => request.target!.includes(h));
+        const isAllowed = hostMatchesAllowlist(request.target, allowedHosts);
         if (!isAllowed) {
           return {
             allowed: false,

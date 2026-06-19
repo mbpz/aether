@@ -2,6 +2,7 @@
 // 提供技能发现、评分、分类和安全管理
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { safeJsonParse } from './parser/safe-json.js';
 import { join, dirname, basename } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { SkillParser, Skill } from './parser/skill-parser.js';
@@ -113,7 +114,7 @@ export class SkillMarketplace {
         for (const line of lines) {
           if (line.trim()) {
             try {
-              const manifest = JSON.parse(line) as SkillManifest;
+              const manifest = safeJsonParse(line) as SkillManifest;
               this.skills.set(manifest.id, manifest);
             } catch {
               // Skip invalid JSON lines
@@ -128,7 +129,7 @@ export class SkillMarketplace {
     // Load ratings
     if (existsSync(ratingsPath)) {
       try {
-        const data = JSON.parse(readFileSync(ratingsPath, 'utf-8')) as Record<string, number[]>;
+        const data = safeJsonParse(readFileSync(ratingsPath, 'utf-8')) as Record<string, number[]>;
         this.ratings = new Map(Object.entries(data));
       } catch (err) {
         console.warn('[aether:marketplace] Failed to load ratings:', err);

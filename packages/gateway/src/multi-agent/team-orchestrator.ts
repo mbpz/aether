@@ -61,6 +61,25 @@ export class TeamOrchestrator {
     this.sandboxManager = sandboxManager;
     this.taskAnalyzer = new TaskAnalyzer();
     this.reliableBus = new ReliableMessageBus(bus);
+    // The orchestrator is itself an agent as far as the bus is concerned;
+    // without a session key the strict-mode bus would refuse every publish
+    // call. We mint one here and reuse it for all internal traffic.
+    this.orchestratorKey = bus.createSession('orchestrator');
+  }
+
+  private orchestratorKey: string;
+
+  /** Publish with the orchestrator's session key so payloads are encrypted. */
+  private publishOrchestrator(
+    to: string,
+    type: 'task' | 'result' | 'issue' | 'heartbeat',
+    payload: unknown,
+  ): void {
+    const key = this.bus.getSessionKey('orchestrator');
+    if (!key) {
+      throw new Error('TeamOrchestrator: orchestrator session key is missing');
+    }
+    this.bus.publish({ from: 'orchestrator', to, type, payload }, key);
   }
 
   /**
@@ -72,16 +91,11 @@ export class TeamOrchestrator {
 
     // 向每个成员发送 team.joined 消息
     for (const member of members) {
-      this.bus.publish({
-        from: 'orchestrator',
-        to: member.agentId,
-        type: 'task',
-        payload: {
-          type: 'team.joined',
-          teamId,
-          teamName: name,
-          members: members.map(m => ({ id: m.agentId, role: m.role })),
-        },
+      this.publishOrchestrator(member.agentId, 'task', {
+        type: 'team.joined',
+        teamId,
+        teamName: name,
+        members: members.map(m => ({ id: m.agentId, role: m.role })),
       });
     }
 
@@ -173,12 +187,7 @@ export class TeamOrchestrator {
     const members = this.teams.get(teamId);
     if (members) {
       for (const member of members) {
-        this.bus.publish({
-          from: 'orchestrator',
-          to: member.agentId,
-          type: 'task',
-          payload: { type: 'team.disbanded', teamId },
-        });
+        this.publishOrchestrator(member.agentId, 'task', { type: 'team.disbanded', teamId });
         this.bus.endSession(member.agentId);
         this.sandboxManager.dispose(member.agentId);
       }
@@ -209,16 +218,11 @@ export class TeamOrchestrator {
     const member = members.find(m => m.agentId === task.assignedAgent);
     const roleHint = member?.role ?? 'generalist';
 
-    this.bus.publish({
-      from: 'orchestrator',
-      to: task.assignedAgent,
-      type: 'task',
-      payload: {
-        type: 'team.task',
-        taskId: task.taskId,
-        description: task.description,
-        roleHint,
-      },
+    this.publishOrchestrator(task.assignedAgent, 'task', {
+      type: 'team.task',
+      taskId: task.taskId,
+      description: task.description,
+      roleHint,
     });
 
     // 等待 result 消息（最多 60s 超时）

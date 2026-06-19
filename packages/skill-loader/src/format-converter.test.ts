@@ -116,8 +116,7 @@ name: Test
 // =============================================================================
 
 describe('convertManusToAether', () => {
-  // TODO(Batch 2): fix Manus → Aether field mapping in convertManusToAether
-  it.skip('converts basic Manus SKILL.md to Aether format', () => {
+  it('converts basic Manus SKILL.md to Aether format', () => {
     const manusContent = `---
 id: manus-code-generator
 name: Code Generator
@@ -443,8 +442,7 @@ Valid content`;
     expect(result.valid).toBe(true);
   });
 
-  // TODO(Batch 2): fix detectAndValidate to surface missing-id/version issues
-  it.skip('detects validation issues', () => {
+  it('detects validation issues', () => {
     const content = `---
 name: Missing ID
 ---

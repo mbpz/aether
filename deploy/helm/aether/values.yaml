@@ -5,9 +5,22 @@ replicaCount: 3
 
 image:
   repository: aether/gateway
-  pullPolicy: IfNotPresent
-  # Overwrite in production with actual image
+  # Pin by digest in production. The release pipeline should `helm upgrade`
+  # with `--set image.digest=sha256:<...>`. The default empty digest is
+  # rejected at template-render time (see templates/deployment.yaml) so
+  # deployments can never silently fall back to a moving tag.
+  digest: ""
+  pullPolicy: Always
+  # Tag is only used as a human-readable label and for non-prod charts
+  # that have not yet been pinned. Production must set `digest`.
   tag: "latest"
+# If true, the template refuses to render when `image.digest` is empty.
+# Production deployments MUST set this to true and provide a pinned digest:
+#   helm upgrade --install aether ./deploy/helm/aether \
+#     --set image.digest=sha256:$(crane digest aether/gateway:1.2.3) \
+#     --set requireImageDigest=true
+# Local dev / CI may set this to false to deploy by tag.
+requireImageDigest: false
 
 imagePullSecrets: []
 nameOverride: ""
@@ -33,11 +46,23 @@ ingress:
 
 # Gateway configuration (environment variables)
 gateway:
+  # Auth: by default the Gateway requires a bearer token. The token can be
+  # supplied in two ways (in order of preference):
+  #   1. `auth.existingSecret` - reference to a pre-created K8s Secret
+  #      containing the `LOCAL_API_TOKEN` key. RECOMMENDED for production.
+  #   2. `auth.token` - inline token. Leave empty to have Helm auto-generate
+  #      one at install time and print it once. The auto-generated token is
+  #      also stored in a Secret so it survives `helm upgrade`.
+  auth:
+    enabled: true                # set false ONLY for local/dev sandboxes
+    existingSecret: ""          # if set, `token` is ignored
+    existingSecretKey: LOCAL_API_TOKEN
+    token: ""                   # inline token; auto-generated when empty
   env:
     # Server
     GATEWAY_PORT: "18790"
-    LOCAL_API_TOKEN: ""
-    LOCAL_TOKEN_AUTH_REQUIRED: "false"
+    # LOCAL_API_TOKEN and LOCAL_TOKEN_AUTH_REQUIRED are populated from
+    # `gateway.auth.*` below; do NOT set them here directly.
     READONLY_MODE: "true"
 
     # Memory
@@ -51,6 +76,15 @@ gateway:
 
     # Data isolation (EP-06 requirement)
     LOCAL_DATA_ONLY: "false"
+
+    # CORS: comma-separated list of origins allowed to call the gateway
+    # cross-origin. Leave empty (default) to disallow cross-origin access.
+    CORS_ALLOWED_ORIGINS: ""
+
+    # Audit read role: required for /api/status/audit endpoints. Generate
+    # with `openssl rand -hex 32`. Leave empty to disable audit access
+    # entirely (recommended when no external auditor is configured).
+    AUDIT_READ_TOKEN: ""
 
 # Resource limits for gateway
 resources:

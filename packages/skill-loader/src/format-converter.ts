@@ -41,7 +41,10 @@ function extractFrontmatter(content: string): { frontmatter: Record<string, unkn
 
 function extractSections(content: string): Record<string, string> {
   const sections: Record<string, string> = {};
-  const sectionRegex = /^##\s+(.+)\n([\s\S]*?)(?=^##\s|\n$|$)/gm;
+  // 抓 `## Heading` 直到下一个 `## ` / `# ` 标题，或文档结束（$ 在非 m 模式下 = 末尾）。
+  // 之前用 `\n$` + m 模式当终止符，多行模式下任何空行都会命中，
+  // 导致 ` ``` ` 代码块开头那个空行就提前截断 section。
+  const sectionRegex = /(?:^|\n)##\s+(.+)\n([\s\S]*?)(?=\n#{1,2}\s|$)/g;
   let match;
   while ((match = sectionRegex.exec(content)) !== null) {
     const sectionName = match[1].trim().toLowerCase();
@@ -52,16 +55,16 @@ function extractSections(content: string): Record<string, string> {
 
 function extractLevelSections(content: string): Record<string, string> {
   const sections: Record<string, string> = {};
-  // Match # Level N: SectionName or ## SectionName
-  const levelRegex = /^#+\s*Level\s*(\d+):\s*(.+)$\n([\s\S]*?)(?=^#+\s*Level\s*\d+:|^##\s|\n$|$)/gm;
+  // # Level N: Name 直到下一个 # / ## 标题，或文档末尾。
+  const levelRegex = /(?:^|\n)#+\s*Level\s*(\d+):\s*([^\n]+)\n([\s\S]*?)(?=\n#+\s*Level\s*\d+:|\n##\s|$)/g;
   let match;
   while ((match = levelRegex.exec(content)) !== null) {
     const level = match[1];
     const name = match[2].trim().toLowerCase();
     sections[`level${level}_${name}`] = match[3].trim();
   }
-  // Also capture standard ## sections
-  const standardRegex = /^##\s+(.+)\n([\s\S]*?)(?=^##\s|\n$|$)/gm;
+  // 也抓标准 ## section（同样规则）。
+  const standardRegex = /(?:^|\n)##\s+(.+)\n([\s\S]*?)(?=\n#{1,2}\s|$)/g;
   while ((match = standardRegex.exec(content)) !== null) {
     const sectionName = match[1].trim().toLowerCase();
     if (!sections[sectionName]) {
@@ -620,14 +623,19 @@ export function detectAndValidate(content: string): { format: SkillFormat; valid
     const { frontmatter } = extractFrontmatter(content);
     if (format !== 'unknown') {
       // Basic validation based on format
-      if (format === 'manus' && !frontmatter.id && !frontmatter.name) {
-        errors.push('Manus format should have id or name');
+      if (format === 'manus') {
+        // Manus 规范要求 name + version + id（至少 name+version 二者俱在；缺 id 也算 issue）。
+        // 之前只查 (!id && !name)，所以 "name 有但缺 version/id" 完全不被检出。
+        if (!frontmatter.name) errors.push('Manus format requires name in frontmatter');
+        if (!frontmatter.id) errors.push('Manus format should have id in frontmatter');
+        if (!frontmatter.version) errors.push('Manus format requires version in frontmatter');
       }
       if (format === 'openclaw' && frontmatter['openclaw-plugin'] !== true && !Array.isArray(frontmatter.actions)) {
         errors.push('OpenClaw format should have openclaw-plugin: true or actions array');
       }
-      if (format === 'aether' && !frontmatter.name) {
-        errors.push('Aether format should have name');
+      if (format === 'aether') {
+        if (!frontmatter.name) errors.push('Aether format requires name in frontmatter');
+        if (!frontmatter.version) errors.push('Aether format requires version in frontmatter');
       }
     }
   } catch (e) {

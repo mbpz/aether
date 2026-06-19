@@ -2,6 +2,7 @@
 // 提供技能开发任务悬赏、提交、评审功能
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { safeJsonParse } from './parser/safe-json.js';
 import { join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -141,7 +142,7 @@ export class BountyManager {
         for (const line of lines) {
           if (line.trim()) {
             try {
-              const bounty = JSON.parse(line) as Bounty;
+              const bounty = safeJsonParse(line) as Bounty;
               this.bounties.set(bounty.id, bounty);
             } catch {
               // Skip invalid JSON lines
@@ -161,7 +162,7 @@ export class BountyManager {
         for (const line of lines) {
           if (line.trim()) {
             try {
-              const submission = JSON.parse(line) as BountySubmission;
+              const submission = safeJsonParse(line) as BountySubmission;
               this.submissions.set(submission.id, submission);
             } catch {
               // Skip invalid JSON lines

@@ -1,0 +1,15 @@
+Aether Gateway has been deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Auth: {{ if .Values.gateway.auth.enabled }}ENABLED{{ else }}DISABLED (gateway is publicly reachable — do not use in production){{ end }}
+{{- if and .Values.gateway.auth.enabled .Values.gateway.auth.existingSecret }}
+  Token is sourced from Secret: {{ .Values.gateway.auth.existingSecret }} (key: {{ .Values.gateway.auth.existingSecretKey | default "LOCAL_API_TOKEN" }})
+{{- else if and .Values.gateway.auth.enabled .Values.gateway.auth.token }}
+  An inline bearer token is configured. Retrieve it from:
+    kubectl get secret {{ include "aether.fullname" . }}-secret -o jsonpath='{.data.LOCAL_API_TOKEN}' | base64 -d
+{{- else if .Values.gateway.auth.enabled }}
+  An auto-generated bearer token is stored in the Secret:
+    kubectl get secret {{ include "aether.fullname" . }}-secret -o jsonpath='{.data.LOCAL_API_TOKEN}' | base64 -d
+{{- end }}
+
+To verify auth is enforced, call an unauthenticated request and expect HTTP 401:
+  curl -i {{ if .Values.ingress.enabled -}}https://{{ (index .Values.ingress.hosts 0).host }}{{- else -}}http://{{ include "aether.fullname" . }}-gateway.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}{{- end }}/api/status
