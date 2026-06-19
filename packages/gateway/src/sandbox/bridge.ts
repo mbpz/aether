@@ -95,7 +95,9 @@ interface ExecResult {
 }
 
 // ── isolated-vm 加载（使用 require 兼容原生 C++ 模块）───────────────────────
+// 加载失败 → fail-closed：runInSandbox() 直接拒绝执行，绝不降级到 new Function。
 let _ivm: typeof import('isolated-vm') | null = null;
+let _ivmLoadError: string | null = null;
 
 // Export SecurityPolicy for testing purposes
 export { SecurityPolicy };
@@ -103,8 +105,19 @@ try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   _ivm = require('isolated-vm');
   console.log('[aether:sandbox-bridge] ✅ isolated-vm loaded (V8 Isolate mode)');
-} catch {
-  console.warn('[aether:sandbox-bridge] ⚠️  isolated-vm not available, using safe-eval fallback');
+} catch (err) {
+  _ivmLoadError = err instanceof Error ? err.message : String(err);
+  console.warn(
+    '[aether:sandbox-bridge] ⚠️  isolated-vm not available — sandbox will REFUSE ' +
+    'to execute code (no fallback). Install the native binding to enable execution. ' +
+    `Reason: ${_ivmLoadError}`,
+  );
+}
+
+/** Test hook：清掉缓存的 ivm 引用以模拟"未加载"状态。仅用于单测。 */
+export function __unsafeResetIvmForTesting(): void {
+  _ivm = null;
+  _ivmLoadError = 'forced unload (test)';
 }
 
 async function runInSandbox(
@@ -179,49 +192,19 @@ async function runInSandbox(
     }
   }
 
-  // ── 模式2：safe-eval 降级模式 ────────────────────────────────────────────
-  return runSafeEval(code, opts, startTime, stdout, stderr);
+  // ── 模式2：fallback 被禁用 ─────────────────────────────────────────────
+  // isolated-vm 加载失败时拒绝执行任意代码，避免使用 `new Function` 之类的
+  // 主机级 JS 求值路径绕过沙箱。调用方应安装 isolated-vm 原生绑定。
+  return {
+    ok: false,
+    error:
+      'isolated-vm runtime is not available; refusing to execute code in an ' +
+      'unsafe fallback. Install the optional isolated-vm native binding ' +
+      `before running agent code.${_ivmLoadError ? ` (load error: ${_ivmLoadError})` : ''}`,
+    durationMs: Date.now() - startTime,
+  };
 }
 
-function runSafeEval(
-  code: string,
-  opts: { timeout: number; input?: unknown },
-  startTime: number,
-  stdout: string[],
-  stderr: string[]
-): Promise<ExecResult> {
-  return new Promise(resolve => {
-    const timer = setTimeout(() => {
-      resolve({ ok: false, error: `Execution timed out after ${opts.timeout}ms`, durationMs: Date.now() - startTime });
-    }, opts.timeout);
-
-    try {
-      const safeConsole = {
-        log: (...args: unknown[]) => stdout.push(args.map(String).join(' ')),
-        error: (...args: unknown[]) => stderr.push(args.map(String).join(' ')),
-        warn: (...args: unknown[]) => stdout.push('[warn] ' + args.map(String).join(' ')),
-        info: (...args: unknown[]) => stdout.push(args.map(String).join(' ')),
-      };
-
-      const wrappedCode = `
-        "use strict";
-        const console = __console__;
-        const input = __input__;
-        (function() { ${code} })();
-      `;
-
-      // eslint-disable-next-line no-new-func
-      const fn = new Function('__console__', '__input__', wrappedCode);
-      const output = fn(safeConsole, opts.input ?? null);
-
-      clearTimeout(timer);
-      resolve({ ok: true, output, stdout: stdout.join('\n'), stderr: stderr.join('\n'), durationMs: Date.now() - startTime });
-    } catch (err) {
-      clearTimeout(timer);
-      resolve({ ok: false, error: err instanceof Error ? err.message : String(err), stdout: stdout.join('\n'), stderr: stderr.join('\n'), durationMs: Date.now() - startTime });
-    }
-  });
-}
 
 // ── SandboxBridge 主类 ─────────────────────────────────────────────────────
 

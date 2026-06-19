@@ -72,12 +72,19 @@ export class WasmtimeRuntime {
 
     try {
       // 动态加载 wasmtime（需要 @bytecodealliance/wasmtime）
+      // 决策：等上游 npm 包发布（见 ADR-002）。在此之前 init() 必须 fail-closed——
+      // 任何"WASM runtime disabled"的静默降级都让调用方误以为沙箱可用。
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       this.wasmtime = require('@bytecodealliance/wasmtime');
       console.log('[aether:wasm-runtime] ✅ Wasmtime runtime loaded');
-    } catch {
-      console.warn('[aether:wasm-runtime] ⚠️  @bytecodealliance/wasmtime not available — WASM runtime disabled');
+    } catch (err) {
       this.wasmtime = null;
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        '@bytecodealliance/wasmtime is not available. WASM runtime cannot start. ' +
+        'See ADR-002. Either install the upstream package once it ships, or set ' +
+        `USE_WASM_RUNTIME=false to fall back to the V8 isolate runtime. (load error: ${msg})`,
+      );
     }
 
     this.initialized = true;

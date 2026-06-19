@@ -42,7 +42,18 @@ async function main() {
       maxExecTimeMs: MAX_EXEC_TIME_MS,
       blockNetwork: true,
     });
-    await wasmRuntime.init();
+    // wasmRuntime.init() 现在会在 wasmtime 缺失时 throw（见 ADR-002）。
+    // 这里不 catch——让进程以非零退出码失败，避免把"装不上 wasmtime"当成"沙箱可用"。
+    try {
+      await wasmRuntime.init();
+    } catch (err) {
+      console.error(
+        '[aether:sandbox] ❌ USE_WASM_RUNTIME=true but Wasmtime initialization failed. ' +
+        'Refusing to start. Set USE_WASM_RUNTIME=false to use the V8 isolate runtime instead.\n' +
+        `Reason: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
     runtime = wasmRuntime as unknown as SandboxRuntime;
     console.log(`[aether:sandbox] ⚙️  Using WASM runtime (Wasmtime)`);
   } else {
