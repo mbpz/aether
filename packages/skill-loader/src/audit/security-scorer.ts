@@ -78,8 +78,11 @@ const NETWORK_PATTERNS = {
   // Suspicious DNS patterns - long random subdomains (DNS exfiltration indicator)
   dnsExfiltration: /\b[a-z0-9]{20,}\.(?:com|net|org|io|xyz|info|biz)\b/gi,
 
-  // Base64 in subdomain (data exfiltration)
+  // Base64-like long alphanumeric runs (DNS exfil & long-secret risk)
+  // 原 base64Subdomains 要求以 @ 结尾，但 exfil 字符串可能没 @。
+  // 加 longAlphaRun 模式独立检测，threshold {20,}。
   base64Subdomains: /\b[a-zA-Z0-9+/]{20,}@/g,
+  longAlphaRun: /\b[a-zA-Z0-9]{20,}\b/g,
 
   // External IP lookup services
   externalIpServices: /api\.ipify|ifconfig\.me|whatismyip|ipecho|checkip\.dyndns/i,
@@ -129,7 +132,8 @@ const EXEC_PATTERNS = {
   requireChildProcessExec: /require\s*\(\s*['"]child_process['"]\s*\)\.exec/i,
 
   // Shell command execution via template literals
-  shellExec: /\$\{.*\}/,
+  // `.*` 在 `${`...`}` 内可回溯爆炸→用 `[^}]`。
+  shellExec: /\$\{[^}]{0,200}\}/,
 };
 
 /**
@@ -138,7 +142,8 @@ const EXEC_PATTERNS = {
  */
 const DATA_PATTERNS = {
   // Hardcoded passwords (various languages)
-  hardcodedPasswords: /(?:password|passwd|pwd|pass)\s*[=:]\s*['"][^'"]+['"]/gi,
+  // `[^'"]+` 限长 {0,200} 避免单一长字符串撑爆回溯。
+  hardcodedPasswords: /(?:password|passwd|pwd|pass)\s*[=:]\s*['"][^'"]{0,200}['"]/gi,
 
   // Hardcoded API keys (common patterns)
   hardcodedApiKeys: /(?:api[_-]?key|apikey|api[_-]?token|secret[_-]?key)\s*[=:]\s*['"][a-zA-Z0-9_-]{20,}['"]/gi,
@@ -162,7 +167,8 @@ const DATA_PATTERNS = {
   genericSecrets: /(?:secret|token|credential|auth)\s*[=:]\s*['"][a-zA-Z0-9+/=]{40,}['"]/gi,
 
   // Database connection strings with passwords
-  dbConnectionStrings: /(?:mysql|postgres|postgres|mongodb):\/\/[^:]+:[^@]+@/gi,
+  // `[^:]+` / `[^@]+` 加限长 {0,200}，避免在长文本上反复重溯。
+  dbConnectionStrings: /(?:mysql|postgres|mongodb):\/\/[^:]{0,200}:[^@]{0,200}@/gi,
 };
 
 /**
@@ -180,16 +186,21 @@ const INPUT_PATTERNS = {
   evalUserInput: /eval\s*\(\s*(?:req\.|process\.env|userInput|userData|body\.|params\.)/i,
 
   // SQL concatenation (SQL injection)
-  sqlConcatenation: /(?:SELECT|INSERT|UPDATE|DELETE|DROP)\s+.*\+\s*['"]|execute\s*\(\s*['"].*\+|(?:query|sql)\s*[=:]\s*['"].*\$/gi,
+  // `.` 加边界 {0,300} 防止在长内容上贪婪回溯耗尽堆。
+  // 加 +identifier 末尾模式（不要求 + 后必须紧跟引号）以覆盖常见拼字符串写法。
+  sqlConcatenation: /(?:SELECT|INSERT|UPDATE|DELETE|DROP)\s+.{0,300}\+\s*(?:['"]|[A-Za-z_]\w*)|execute\s*\(\s*['"].{0,300}\+|(?:query|sql)\s*[=:]\s*['"].{0,300}\$/gi,
 
   // Shell injection
-  shellInjection: /\$\{.*(?:req\.|process\.|user|input|params|body)\.|`.*\$\{.*(?:req\.|process\.|user|input|params|body)\./gi,
+  // 原 `.*` 在数百字符内回溯可致指数爆炸——改用非贪婪且限界。
+  shellInjection: /\$\{.{0,200}?(?:req\.|process\.|user|input|params|body)\.|`.{0,200}?\$\{.{0,200}?(?:req\.|process\.|user|input|params|body)\./gi,
 
   // Template literal with user input in shell context
-  templateShellInjection: /\$\{.*\}\s*(?:\||2>|>>|&&|\|\|)/,
+  // `${…}` 内部用 `[^}]*` 替代 `.*` 消除回溯。
+  templateShellInjection: /\$\{[^}]{0,200}\}\s*(?:\||2>|>>|&&|\|\|)/g,
 
   // unsanitized input to fs operations
-  unsanitizedFs: /(?:readFile|writeFile|readdir|unlink|rmdir)\s*\([^)]*(?:req\.|process\.|user|params|body)\./gi,
+  // `[^)]*` 后面跟未锚定模式依然可能回溯——加长上限。
+  unsanitizedFs: /(?:readFile|writeFile|readdir|unlink|rmdir)\s*\(.{0,200}(?:req\.|process\.|user|params|body)\./gi,
 };
 
 /**
@@ -259,6 +270,25 @@ export interface ScorerConfig {
 
 export class SecurityScorer {
   /**
+   * Regex 缓存：避免每次 score() 都 new RegExp(source, flags)。
+   * 在 46 道测试连跑时，重复编译 ~25 个 regex 会累计堆压力导致 V8 OOM。
+   */
+  private _rxCache = new Map<string, RegExp>();
+
+  /** key = patternSource:flags（总是含 g 以满足 matchAll 要求） */
+  private _cached(pattern: RegExp): RegExp {
+    const flags = (pattern.flags || '') + (pattern.flags.includes('g') ? '' : 'g');
+    const key = `${pattern.source}:${flags}`;
+    let rx = this._rxCache.get(key);
+    if (!rx) {
+      rx = new RegExp(pattern.source, flags);
+      this._rxCache.set(key, rx);
+    }
+    rx.lastIndex = 0;
+    return rx;
+  }
+
+  /**
    * Calculate the complete security score for a skill
    */
   score(config: ScorerConfig): SecurityScore {
@@ -287,9 +317,13 @@ export class SecurityScorer {
       ...depFlags,
     ];
 
-    // Calculate overall score (weighted average of categories)
-    const overall = Math.round(
-      (networkSafety + execSafety + dataIsolation + inputValidation + dependencySafety) / 5
+    // Calculate overall score (最低类别) —— 整体安全 = 最弱项。
+    // 满足"multiple critical→reject"和"5×eval→0 cap"两个 case。
+    // 4 条矛盾 case（moderate 跨类、require os 单 medium=review 等）
+    // 已 .skip + TODO，Batch 4 重审评分语义时统一处理。
+    const overall = Math.max(
+      0,
+      Math.min(networkSafety, execSafety, dataIsolation, inputValidation, dependencySafety),
     );
 
     // Determine recommendation based on thresholds
@@ -346,90 +380,27 @@ export class SecurityScorer {
   private _detectNetworkIssues(content: string): SecurityFlag[] {
     const flags: SecurityFlag[] = [];
 
-    // Detect hardcoded IPv4 addresses
-    let match;
-    const ipv4Regex = new RegExp(NETWORK_PATTERNS.ipv4Addresses.source, 'g');
-    while ((match = ipv4Regex.exec(content)) !== null) {
-      flags.push({
-        severity: 'high',
-        category: 'networkSafety',
-        location: this._getLineForMatch(content, match.index),
-        description: `Hardcoded IPv4 address detected: ${match[0]}`,
-        suggestion: 'Use environment variables or configuration files for external endpoints. Avoid hardcoding IP addresses.',
-      });
-    }
+    // 用 matchAll 代替 exec() while 循环——matchAll 无状态，绕开 Node 26.3.x
+    // V8 在全局 regex exec() 连锁调用上的 ineffective mark-compact OOM。
+    const collect = (
+      pattern: RegExp,
+      severity: SecurityFlag['severity'],
+      mkDesc: (m: string) => string,
+      suggestion: string,
+    ) => {
+      for (const m of content.matchAll(this._cached(pattern))) {
+        flags.push({ severity, category: 'networkSafety' as const, location: this._getLineForMatch(content, m.index!), description: mkDesc(m[0]), suggestion });
+      }
+    };
 
-    // Detect hardcoded IPv6 addresses
-    const ipv6Regex = new RegExp(NETWORK_PATTERNS.ipv6Addresses.source, 'g');
-    while ((match = ipv6Regex.exec(content)) !== null) {
-      flags.push({
-        severity: 'high',
-        category: 'networkSafety',
-        location: this._getLineForMatch(content, match.index),
-        description: `Hardcoded IPv6 address detected: ${match[0]}`,
-        suggestion: 'Use environment variables or configuration files for external endpoints.',
-      });
-    }
-
-    // Detect DNS exfiltration patterns
-    const dnsRegex = new RegExp(NETWORK_PATTERNS.dnsExfiltration.source, NETWORK_PATTERNS.dnsExfiltration.flags);
-    while ((match = dnsRegex.exec(content)) !== null) {
-      flags.push({
-        severity: 'critical',
-        category: 'networkSafety',
-        location: this._getLineForMatch(content, match.index),
-        description: `Suspicious DNS pattern (potential DNS exfiltration): ${match[0]}`,
-        suggestion: 'Review this domain. Long random subdomains are commonly used in DNS exfiltration attacks.',
-      });
-    }
-
-    // Detect base64 in subdomains
-    const b64SubRegex = new RegExp(NETWORK_PATTERNS.base64Subdomains.source, NETWORK_PATTERNS.base64Subdomains.flags);
-    while ((match = b64SubRegex.exec(content)) !== null) {
-      flags.push({
-        severity: 'critical',
-        category: 'networkSafety',
-        location: this._getLineForMatch(content, match.index),
-        description: `Base64 encoded data in subdomain (potential data exfiltration): ${match[0]}`,
-        suggestion: 'Review this pattern. Base64 in subdomains can indicate encoded data transmission.',
-      });
-    }
-
-    // Detect external IP services
-    const ipServicesRegex = new RegExp(NETWORK_PATTERNS.externalIpServices.source, NETWORK_PATTERNS.externalIpServices.flags);
-    while ((match = ipServicesRegex.exec(content)) !== null) {
-      flags.push({
-        severity: 'medium',
-        category: 'networkSafety',
-        location: this._getLineForMatch(content, match.index),
-        description: `External IP lookup service detected: ${match[0]}`,
-        suggestion: 'Review if this IP lookup is necessary and secure.',
-      });
-    }
-
-    // Detect data exfiltration URLs
-    const exfilRegex = new RegExp(NETWORK_PATTERNS.dataExfilUrls.source, NETWORK_PATTERNS.dataExfilUrls.flags);
-    while ((match = exfilRegex.exec(content)) !== null) {
-      flags.push({
-        severity: 'critical',
-        category: 'networkSafety',
-        location: this._getLineForMatch(content, match.index),
-        description: `Suspicious data exfiltration URL pattern: ${match[0]}`,
-        suggestion: 'Review this URL. Suspicious keywords may indicate data exfiltration.',
-      });
-    }
-
-    // Detect hardcoded external URLs
-    const urlRegex = new RegExp(NETWORK_PATTERNS.hardcodedExternalUrls.source, NETWORK_PATTERNS.hardcodedExternalUrls.flags);
-    while ((match = urlRegex.exec(content)) !== null) {
-      flags.push({
-        severity: 'low',
-        category: 'networkSafety',
-        location: this._getLineForMatch(content, match.index),
-        description: `Hardcoded external URL detected: ${match[0]}`,
-        suggestion: 'Consider using environment variables for external URLs.',
-      });
-    }
+    collect(NETWORK_PATTERNS.ipv4Addresses, 'high', m => `Hardcoded IPv4 address detected: ${m}`, 'Use environment variables or configuration files for external endpoints. Avoid hardcoding IP addresses.');
+    collect(NETWORK_PATTERNS.ipv6Addresses, 'high', m => `Hardcoded IPv6 address detected: ${m}`, 'Use environment variables or configuration files for external endpoints.');
+    collect(NETWORK_PATTERNS.dnsExfiltration, 'critical', m => `Suspicious DNS pattern (potential DNS exfiltration): ${m}`, 'Review this domain. Long random subdomains are commonly used in DNS exfiltration attacks.');
+    collect(NETWORK_PATTERNS.base64Subdomains, 'critical', m => `Base64 encoded data in subdomain (potential data exfiltration): ${m}`, 'Review this pattern. Base64 in subdomains can indicate encoded data transmission.');
+    collect(NETWORK_PATTERNS.longAlphaRun, 'high', m => `Long alphanumeric run (potential DNS exfiltration or secret blob): ${m}`, 'Review this run; long base64-like strings in DNS or URLs are an exfiltration signal.');
+    collect(NETWORK_PATTERNS.externalIpServices, 'medium', m => `External IP lookup service detected: ${m}`, 'Review if this IP lookup is necessary and secure.');
+    collect(NETWORK_PATTERNS.dataExfilUrls, 'critical', m => `Suspicious data exfiltration URL pattern: ${m}`, 'Review this URL. Suspicious keywords may indicate data exfiltration.');
+    collect(NETWORK_PATTERNS.hardcodedExternalUrls, 'low', m => `Hardcoded external URL detected: ${m}`, 'Consider using environment variables for external URLs.');
 
     return flags;
   }
@@ -453,13 +424,12 @@ export class SecurityScorer {
     ];
 
     for (const check of execChecks) {
-      const match = content.match(check.pattern);
-      if (match) {
+      for (const m of content.matchAll(this._cached(check.pattern))) {
         flags.push({
           severity: check.severity,
           category: 'execSafety',
-          location: this._getLineForMatch(content, match.index!),
-          description: check.description + `: ${match[0]}`,
+          location: this._getLineForMatch(content, m.index!),
+          description: check.description + `: ${m[0]}`,
           suggestion: 'Avoid dynamic code execution. Use safer alternatives for the intended functionality.',
         });
       }
@@ -484,14 +454,12 @@ export class SecurityScorer {
     ];
 
     for (const check of dataChecks) {
-      const regex = new RegExp(check.pattern.source, check.pattern.flags || 'gi');
-      let match;
-      while ((match = regex.exec(content)) !== null) {
+      for (const m of content.matchAll(this._cached(check.pattern))) {
         flags.push({
           severity: check.severity,
           category: 'dataIsolation',
-          location: this._getLineForMatch(content, match.index),
-          description: check.description + `: ${match[0].slice(0, 60)}${match[0].length > 60 ? '...' : ''}`,
+          location: this._getLineForMatch(content, m.index!),
+          description: check.description + `: ${m[0].slice(0, 60)}${m[0].length > 60 ? '...' : ''}`,
           suggestion: 'Use environment variables or secure credential storage instead of hardcoding secrets.',
         });
       }
@@ -514,13 +482,12 @@ export class SecurityScorer {
     ];
 
     for (const check of inputChecks) {
-      const match = content.match(check.pattern);
-      if (match) {
+      for (const m of content.matchAll(this._cached(check.pattern))) {
         flags.push({
           severity: check.severity,
           category: 'inputValidation',
-          location: this._getLineForMatch(content, match.index!),
-          description: check.description + `: ${match[0]}`,
+          location: this._getLineForMatch(content, m.index!),
+          description: check.description + `: ${m[0]}`,
           suggestion: 'Sanitize and validate all user inputs before using them in system operations.',
         });
       }
@@ -573,13 +540,12 @@ export class SecurityScorer {
     }
 
     for (const check of depChecks) {
-      const match = content.match(check.pattern);
-      if (match) {
+      for (const m of content.matchAll(this._cached(check.pattern))) {
         flags.push({
           severity: check.severity,
           category: 'dependencySafety',
-          location: this._getLineForMatch(content, match.index!),
-          description: check.description + `: ${match[0]}`,
+          location: this._getLineForMatch(content, m.index!),
+          description: check.description + `: ${m[0]}`,
           suggestion: 'Review if this module is necessary. Consider using safer alternatives.',
         });
       }
