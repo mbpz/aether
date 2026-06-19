@@ -8,6 +8,11 @@ dist/
 build/
 *.js.map
 
+# tsc emitting next to .ts (should never happen, but guard against it)
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+
 # Runtime data
 *.log
 *.pid

@@ -2,14 +2,29 @@
   "name": "@aether/skill-loader",
   "version": "0.1.0",
   "description": "Aether Skill System - Progressive Disclosure Loader",
-  "main": "dist/index.js",
   "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./parser": {
+      "development": "./src/parser/skill-parser.ts",
+      "default": "./dist/parser/skill-parser.js"
+    },
+    "./audit": {
+      "development": "./src/audit/skill-auditor.ts",
+      "default": "./dist/audit/skill-auditor.js"
+    }
+  },
   "bin": {
     "skill-audit": "./bin/skill-audit.js"
   },
   "scripts": {
     "dev": "node --import tsx src/index.ts",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",

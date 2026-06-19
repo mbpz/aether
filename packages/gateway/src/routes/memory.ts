@@ -65,9 +65,9 @@ export function createMemoryRouter(deps: MemoryDeps): Router {
   });
 
   // ── DELETE /:id ───────────────────────────────────────────────────────────
-  router.delete('/:id', (req: Request, res: Response) => {
+  router.delete('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const removed = deps.memory.forget(id);
+    const removed = await deps.memory.forget(id);
     if (removed) {
       res.json({ ok: true, message: `Memory ${id} removed` });
     } else {

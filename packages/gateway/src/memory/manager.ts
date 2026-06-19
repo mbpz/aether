@@ -20,6 +20,7 @@ import { TFIDFVectorizer } from './vectorizer.js';
 import type { OllamaVectorizer } from './ollama-vectorizer.js';
 import type { QdrantStore, SearchResult } from './qdrant-store.js';
 import type { LLMProvider } from '../llm/provider.js';
+import type { ChatMessage } from '../llm/types.js';
 
 const DEFAULT_WORKING_WINDOW = 50;   // L1：保留最近 50 条
 const DEFAULT_EPISODIC_DIR   = process.env.MEMORY_DIR ?? './memory-store';
@@ -133,7 +134,7 @@ export class MemoryManager {
 
   // ── 检索记忆 ──────────────────────────────────────────────────────────────
 
-  recall(query: MemoryQuery): MemoryQueryResult {
+  async recall(query: MemoryQuery): Promise<MemoryQueryResult> {
     const t0 = Date.now();
     const limit = query.limit ?? 10;
     let results: Array<MemoryEntry & { score?: number }> = [];
@@ -142,7 +143,8 @@ export class MemoryManager {
       results.push(...this._searchWorking(query));
     }
     if (!query.tier || query.tier === 'semantic') {
-      results.push(...this._searchSemantic(query));
+      const semanticResults = await this._searchSemantic(query);
+      results.push(...semanticResults);
     }
     if (!query.tier || query.tier === 'episodic') {
       results.push(...this._searchEpisodic(query));
@@ -177,7 +179,7 @@ export class MemoryManager {
   }
 
   /** 删除指定记忆 */
-  forget(id: string): boolean {
+  async forget(id: string): Promise<boolean> {
     let removed = false;
     const wIdx = this.working.findIndex(e => e.id === id);
     if (wIdx >= 0) { this.working.splice(wIdx, 1); removed = true; }
@@ -444,7 +446,7 @@ export class MemoryManager {
 
     const sessionNote = group.sessionId ? ` (session: ${group.sessionId})` : '';
 
-    const messages: Array<{ role: string; content: string }> = [
+    const messages: ChatMessage[] = [
       {
         role: 'system',
         content: `You are a knowledge distillation engine. Given a sequence of memory events, extract the key facts, decisions, and conclusions. Output a JSON array of objects with fields:
@@ -545,8 +547,8 @@ Return ONLY the JSON array, no markdown, no explanation. Aim for 3-10 facts depe
 
   // ── 内部辅助 ──────────────────────────────────────────────────────────────
 
-  /** 确保基准目录存在 */
-  private _ensureDir(): void {
+  /** 返回内存统计信息 */
+  public stats(): MemoryStats {
     const workingTokens = this.working.reduce((s, e) => s + e.content.split(/\s+/).length, 0);
     const episodicSize = this._episodicFileSize();
     const useOllama = !!this.embeddingProvider;

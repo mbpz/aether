@@ -76,10 +76,10 @@ export class FirecrackerPoolManager {
       }
 
       const vmConfig = {
-        boot-source: bootSource,
+        'boot-source': bootSource,
         drives: [{ drive_id: 'root', path_on_host: this.config.rootfsPath, is_root_device: true, is_read_only: true }],
-        machine-config: { vcpus: this.config.vcpus, mem_size_mib: this.config.memoryMb },
-        network-interfaces: [],
+        'machine-config': { vcpus: this.config.vcpus, mem_size_mib: this.config.memoryMb },
+        'network-interfaces': [] as Array<{ iface_id: string; guest_mac: string; host_dev_name: string }>,
       };
 
       writeFileSync(configPath, JSON.stringify(vmConfig));

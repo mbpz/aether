@@ -9,12 +9,16 @@
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "gateway": "npm run dev -w packages/gateway",
     "sandbox": "npm run dev -w packages/sandbox",
     "ui": "npm run dev -w packages/ui"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.5"
   }
 }

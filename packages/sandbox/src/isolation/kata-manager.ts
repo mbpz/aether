@@ -74,7 +74,8 @@ export class KataRuntimeManager {
     };
 
     try {
-      await this.k8sApi.createNamespacedPod(this.namespace, pod);
+      // @kubernetes/client-node v1.x uses named-args object style
+      await this.k8sApi.createNamespacedPod({ namespace: this.namespace, body: pod });
     } catch (err) {
       throw new Error(`Failed to create pod ${podName} in namespace ${this.namespace}: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -86,7 +87,7 @@ export class KataRuntimeManager {
    */
   async deletePod(podName: string): Promise<void> {
     try {
-      await this.k8sApi.deleteNamespacedPod(podName, this.namespace);
+      await this.k8sApi.deleteNamespacedPod({ name: podName, namespace: this.namespace });
     } catch (err) {
       throw new Error(`Failed to delete pod ${podName} in namespace ${this.namespace}: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -100,8 +101,9 @@ export class KataRuntimeManager {
     while (Date.now() - start < timeoutMs) {
       let phase: string;
       try {
-        const { body } = await this.k8sApi.readNamespacedPodStatus(podName, this.namespace);
-        phase = body.status?.phase ?? 'Unknown';
+        // v1.x returns the pod directly (no .body wrapper)
+        const pod = await this.k8sApi.readNamespacedPodStatus({ name: podName, namespace: this.namespace });
+        phase = pod.status?.phase ?? 'Unknown';
       } catch (err) {
         throw new Error(`Failed to read pod ${podName} status in namespace ${this.namespace}: ${err instanceof Error ? err.message : String(err)}`);
       }

@@ -12,6 +12,7 @@ export interface MemoryEntry {
     taskId?: string;
     tags?: string[];
     importance?: number;   // 0-1，用于遗忘策略
+    compactedFrom?: string[]; // L2→L3 压缩时记录的源事件 id 列表
   };
   embedding?: number[];    // TF-IDF 向量（L3 语义层）
   createdAt: string;

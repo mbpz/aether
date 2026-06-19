@@ -1,5 +1,8 @@
 import { AuditReport, AuditIssue, AuditConfig, IssueType, IssueSeverity } from './auditor-types.js';
 
+// Re-export types so consumers can import everything from one entry point
+export type { AuditReport, AuditIssue, AuditConfig, IssueType, IssueSeverity } from './auditor-types.js';
+
 const SEVERITY_PENALTIES: Record<IssueSeverity, number> = {
   critical: 40,
   high: 20,
