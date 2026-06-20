@@ -6,7 +6,7 @@
 //   - Firecracker: 轻量级 VMM，更快启动（使用 firecracker 二进制）
 
 import { randomUUID } from 'crypto';
-import { FirecrackerRuntime, FirecrackerVMConfig } from './firecracker-runtime.js';
+import { FirecrackerRuntime, FirecrackerVMConfig } from './firecracker.js';
 import { KataRuntime, KataVMConfig } from './kata-runtime.js';
 
 // ── 类型定义 ─────────────────────────────────────────────────────────────

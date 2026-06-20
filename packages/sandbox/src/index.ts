@@ -6,7 +6,7 @@ import 'dotenv/config';
 import { SandboxRuntime } from './runtime/sandbox.js';
 import { WasmtimeRuntime } from './runtime/wasm-runtime.js';
 import { MicroVMRuntime, MicroVMConfig, MicroVMResult, MicroVMExecutionResult } from './runtime/microvm-runtime.js';
-import { FirecrackerRuntime } from './runtime/firecracker-runtime.js';
+import { FirecrackerRuntime } from './runtime/firecracker.js';
 import { KataRuntime } from './runtime/kata-runtime.js';
 import { SecurityPolicy } from './security/policy.js';
 import { EbpfFirewall } from './security/ebpf-firewall.js';

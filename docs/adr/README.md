@@ -8,6 +8,8 @@
 |---|------|------|------|
 | [001](001-no-safe-eval.md) | 移除 sandbox 的 `safe-eval` / `new Function` 降级 | 2026-06-19 | Batch 1 安全回归 |
 | [002](002-wasmtime-upstream-blocking.md) | Wasmtime npm 上游阻塞 EP-01 Phase 2 | 2026-06-19 | Batch 1 安全回归 |
+| [003](003-firecracker-single-implementation.md) | Firecracker 单实现：pool 概念合并进 runtime | 2026-06-20 | Batch 3 架构债 |
+| [004](004-package-exports-contract.md) | package.json `exports` 作为跨包通信契约 | 2026-06-20 | Batch 3 架构债 |
 
 ## 编写约定
 

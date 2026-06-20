@@ -5,83 +5,9 @@ import { TaskQueue, SandboxTask } from './task-queue.js';
 import { AuditLogger } from '../audit/logger.js';
 import { ManifestEngine, ManifestValidationResult } from '../manifest/engine.js';
 import { EbpfFirewall } from '@aether/sandbox';
-
-// ── 内联 Sandbox 核心逻辑（避免跨包 ESM 路径问题）──────────────────────────
-
-interface PolicyConfig {
-  blockNetwork: boolean;
-  blockFilesystem: boolean;
-  blockProcessSpawn: boolean;
-  maxExecTimeMs: number;
-  maxMemoryMb: number;
-}
-
-interface PolicyViolation {
-  type: string;
-  detail: string;
-  blocked: true;
-}
-
-class SecurityPolicy {
-  constructor(readonly config: PolicyConfig) {}
-
-  scanCode(code: string): PolicyViolation[] {
-    const violations: PolicyViolation[] = [];
-
-    if (this.config.blockNetwork) {
-      const networkPatterns = [
-        /require\s*\(\s*['"]https?['"]\s*\)/,
-        /require\s*\(\s*['"]net['"]\s*\)/,
-        /\bfetch\s*\(/,
-        /XMLHttpRequest/,
-        /WebSocket\s*\(/,
-        /import\s+.*\s+from\s+['"]https?:\/\//,
-      ];
-      for (const pattern of networkPatterns) {
-        if (pattern.test(code)) {
-          violations.push({ type: 'network', detail: `Network access blocked: ${pattern}`, blocked: true });
-          break;
-        }
-      }
-    }
-
-    if (this.config.blockFilesystem) {
-      const fsPatterns = [
-        /require\s*\(\s*['"]fs['"]\s*\)/,
-        /readFileSync|writeFileSync|readFile\s*\(|writeFile\s*\(/,
-        /createReadStream|createWriteStream/,
-      ];
-      for (const pattern of fsPatterns) {
-        if (pattern.test(code)) {
-          violations.push({ type: 'filesystem', detail: `Filesystem access blocked: ${pattern}`, blocked: true });
-          break;
-        }
-      }
-    }
-
-    if (this.config.blockProcessSpawn) {
-      const processPatterns = [
-        /child_process/,
-        /\bspawn\s*\(/,
-        /\bexecSync\s*\(/,
-        /process\.exit/,
-        /process\.env/,
-      ];
-      for (const pattern of processPatterns) {
-        if (pattern.test(code)) {
-          violations.push({ type: 'process', detail: `Process operation blocked: ${pattern}`, blocked: true });
-          break;
-        }
-      }
-    }
-
-    return violations;
-  }
-
-  summary() {
-    return this.config;
-  }
-}
+// Batch 3 / ADR-004：SecurityPolicy 来自 @aether/sandbox 单一定义，
+// 不再在 gateway 内联一份会漂移的副本。
+import { SecurityPolicy, PolicyViolation } from '@aether/sandbox/security';
 
 interface ExecResult {
   ok: boolean;
