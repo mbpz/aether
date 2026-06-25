@@ -10,6 +10,7 @@ import { FirecrackerRuntime } from './runtime/firecracker.js';
 import { KataRuntime } from './runtime/kata-runtime.js';
 import { SecurityPolicy } from './security/policy.js';
 import { EbpfFirewall } from './security/ebpf-firewall.js';
+import { EbpfPolicySync } from './security/ebpf-policy-sync.js';
 import { CodeActEngine } from './codeact/engine.js';
 
 const SANDBOX_PORT = parseInt(process.env.SANDBOX_PORT ?? '18791', 10);
@@ -28,11 +29,26 @@ async function main() {
     maxMemoryMb: MAX_MEMORY_MB,
   });
 
-  // EP-01: eBPF 防火墙（模拟内核级网络拦截）
+  // EP-01: eBPF 防火墙（应用层热路径决策 + 镜像到内核 BPF LPM trie）
   const ebpf = new EbpfFirewall({
     defaultAction: 'block',
     logConnections: true,
   });
+
+  // EP-01 / ADR-006：把 in-process firewall 规则同步到 Go agent 消费的 YAML
+  // 仅在 STANDALONE 模式下启动（standalone sandbox 进程才能写 /etc/aether）。
+  // 在 gateway-in-process 模式（默认）下，gateway 持 firewall 做 hot-path 决策，
+  // 部署侧负责把 YAML 推到 DaemonSet ConfigMap（ADR-006 详述）。
+  let ebpfSync: EbpfPolicySync | null = null;
+  if (process.env.STANDALONE === 'true' && process.env.EBPF_POLICY_SYNC !== 'false') {
+    ebpfSync = new EbpfPolicySync(ebpf, {
+      policyPath: process.env.EBPF_POLICY_PATH ?? '/etc/aether/ebpf-policy.yaml',
+      debounceMs: parseInt(process.env.EBPF_SYNC_DEBOUNCE_MS ?? '1000', 10),
+    });
+    ebpfSync.start();
+    process.on('SIGTERM', () => ebpfSync?.stop());
+    process.on('SIGINT', () => ebpfSync?.stop());
+  }
 
   // 选择执行引擎
   let runtime: SandboxRuntime | WasmtimeRuntime;
@@ -67,11 +83,12 @@ async function main() {
   console.log(`[aether:sandbox] ✅ Sandbox ready`);
   console.log(`[aether:sandbox]    policy: network=blocked, fs=blocked, maxMem=${MAX_MEMORY_MB}MB, maxTime=${MAX_EXEC_TIME_MS}ms`);
   console.log(`[aether:sandbox]    ebpf: default block=${ebpf.config.defaultAction}, logConnections=${ebpf.config.logConnections}`);
+  console.log(`[aether:sandbox]    ebpfSync: ${ebpfSync ? 'enabled' : 'disabled (gateway-in-process mode)'}`);
 
-  return { runtime, codeact, policy, ebpf };
+  return { runtime, codeact, policy, ebpf, ebpfSync };
 }
 
-export { main, EbpfFirewall };
+export { main, EbpfFirewall, EbpfPolicySync };
 export type {
   SandboxRuntime,
   CodeActEngine,
