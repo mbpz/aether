@@ -59,7 +59,7 @@
 |------|------|---------|
 | **Wasmtime (WASM) 替换 isolated-vm** | 🔴 **阻塞中** | 等 `@bytecodealliance/wasmtime` 上游发布；`node scripts/check-wasmtime.mjs` 探测（current exit=2） |
 | WasmtimeRuntime 已写、fail-closed 守卫已加 | ✅ | `grep -n "throw new Error" packages/sandbox/src/runtime/wasm-runtime.ts` |
-| libbpf eBPF 网络监控（kernel 层）| 🟡 **部分** | `ls deploy/ebpf/{bpf,agent}` — C/Go 代码已写，运行时未集成 |
+| libbpf eBPF 网络监控（kernel 层）| ✅ | `grep -n "EbpfPolicySync" packages/sandbox/src/security/ebpf-policy-sync.ts` + `grep "new EbpfFirewall" packages/gateway/src/index.ts` + ADR-006 |
 | wasi-socket 网络白名单 | 📋 待开始 | — |
 
 **Phase 3（长期）:**

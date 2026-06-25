@@ -12,7 +12,9 @@ import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bridgePath = join(__dirname, 'bridge.ts');
+const gatewayEntryPath = join(__dirname, '..', 'index.ts');
 const bridgeSource = readFileSync(bridgePath, 'utf-8');
+const gatewayEntrySource = readFileSync(gatewayEntryPath, 'utf-8');
 
 describe('SandboxBridge fail-closed (Batch 1 / safe-eval removal)', () => {
   it('no `new Function(` call survives in source', () => {
@@ -38,5 +40,21 @@ describe('SandboxBridge fail-closed (Batch 1 / safe-eval removal)', () => {
   it('module exports a test reset hook for forcing the unavailable state', () => {
     // 给后续动态测留接口；hook 名带 __unsafe 前缀强提示仅测试用。
     expect(bridgeSource).toMatch(/export\s+function\s+__unsafeResetIvmForTesting/);
+  });
+});
+
+describe('eBPF firewall wiring (Batch 5 / ADR-006)', () => {
+  it('bridge accepts an injected EbpfFirewall and uses checkConnection / logConnection', () => {
+    expect(bridgeSource).toMatch(/checkConnection\(/);
+    expect(bridgeSource).toMatch(/logConnection\(/);
+  });
+
+  it('gateway entry actually constructs EbpfFirewall and passes it to SandboxBridge', () => {
+    // B5 修复：之前 gateway 没构造 firewall，bridge 里 `if (this.firewall)` 是 dead branch。
+    expect(gatewayEntrySource).toMatch(/new EbpfFirewall\(/);
+    // 第二个参数 `EbpfFirewall` 实例 必须出现在 new SandboxBridge 形参里。
+    expect(gatewayEntrySource).toMatch(
+      /new SandboxBridge\([^)]*EbpfFirewall|new SandboxBridge\([^,]+,[^,]+,[^,]+,[^,)]*\)/,
+    );
   });
 });

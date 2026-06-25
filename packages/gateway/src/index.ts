@@ -10,6 +10,7 @@ import { ManifestEngine } from './manifest/engine.js';
 import { VaultInjector } from './vault/injector.js';
 import { TaskQueue } from './sandbox/task-queue.js';
 import { SandboxBridge } from './sandbox/bridge.js';
+import { EbpfFirewall } from '@aether/sandbox';
 import { MemoryManager } from './memory/manager.js';
 import { AgentRunner } from './agent-loop/runner.js';
 import { AgentRegistry } from './multi-agent/registry.js';
@@ -46,7 +47,11 @@ async function main() {
   const manifest = new ManifestEngine();
   const vault = new VaultInjector();
   const taskQueue = new TaskQueue();
-  const sandbox = new SandboxBridge(taskQueue, audit, manifest);
+  // EP-01 / ADR-006: 构造 in-process EbpfFirewall 传给 SandboxBridge。
+  // bridge.ts:255 那个 `if (this.firewall) { ... }` 死分支现在活起来了——
+  // 提交 code 时 firewall.checkConnection 真的会被调，违规会被真的拒绝。
+  const ebpfFirewall = new EbpfFirewall({ defaultAction: 'block', logConnections: true });
+  const sandbox = new SandboxBridge(taskQueue, audit, manifest, ebpfFirewall);
   const memory = new MemoryManager({
     storeDir: process.env.MEMORY_DIR ?? './memory-store',
     workingWindowSize: parseInt(process.env.MEMORY_WINDOW ?? '50', 10),

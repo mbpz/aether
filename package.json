@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check:wasmtime": "node scripts/check-wasmtime.mjs",
+    "check:ebpf": "node scripts/check-ebpf-agent.mjs",
     "gateway": "npm run dev -w packages/gateway",
     "sandbox": "npm run dev -w packages/sandbox",
     "ui": "npm run dev -w packages/ui"

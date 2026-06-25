@@ -46,6 +46,10 @@ jobs:
         # 不让这一步 fail PR；只在 schedule/cron 下作为可见提示。
         run: npm run check:wasmtime || true
 
+      - name: Probe eBPF agent (ADR-006)
+        # 同上：not-yet (exit 2) 是 sandbox 没部署 eBPF agent 的预期状态。
+        run: npm run check:ebpf || true
+
       - name: Upload build artifacts
         if: success()
         uses: actions/upload-artifact@v4

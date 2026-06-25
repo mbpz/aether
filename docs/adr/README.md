@@ -11,6 +11,7 @@
 | [003](003-firecracker-single-implementation.md) | Firecracker 单实现：pool 概念合并进 runtime | 2026-06-20 | Batch 3 架构债 |
 | [004](004-package-exports-contract.md) | package.json `exports` 作为跨包通信契约 | 2026-06-20 | Batch 3 架构债 |
 | [005](005-sdd-batches.md) | SDD 分批修复流程作为工程标准 | 2026-06-20 | Batch 4 制度化 |
+| [006](006-ebpf-yaml-sync.md) | eBPF 内核层集成通过 YAML 文件桥接 | 2026-06-25 | Batch 5 架构 |
 
 ## 编写约定
 
