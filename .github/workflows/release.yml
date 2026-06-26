@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      # v0.1.0, v0.2.0-rc.1, v1.0.0 — semver tags only.
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+# Read-only token to publish. Stored as repo secret; rotated
+# quarterly (see SECURITY.md cadence). The publish job is the
+# only consumer.
+permissions:
+  contents: read
+  id-token: write  # required for npm provenance (OIDC)
+  packages: write
+
+jobs:
+  publish:
+    name: publish @aether/* to npm with provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - run: npm ci
+
+      # Per ADR-005: build must be green before any release.
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      # Re-attest the version in package.json matches the tag —
+      # prevents publishing a tag that doesn't match the source
+      # tree (e.g. someone forgot to bump version).
+      - name: Verify tag matches package.json versions
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          for pkg in package.json packages/*/package.json; do
+            ver=$(node -e "console.log(require('./$pkg').version)")
+            if [[ "$ver" != "$TAG_VERSION" ]]; then
+              echo "FAIL: $pkg version is $ver, tag is $TAG_VERSION"
+              exit 1
+            fi
+          done
+          echo "All package.json versions match tag v$TAG_VERSION"
+
+      # Publish the three workspace packages in dependency order.
+      # Aether uses npm workspaces; `npm publish -w` resolves the
+      # version from each package's own package.json.
+      # B7-4: provenance is enabled via .npmrc (provenance=true).
+      # The OIDC token from actions/setup-node is presented to npm
+      # automatically; no NPM_TOKEN secret needed.
+      - name: Publish @aether/sandbox
+        run: npm publish -w @aether/sandbox --provenance --access public
+
+      - name: Publish @aether/skill-loader
+        run: npm publish -w @aether/skill-loader --provenance --access public
+
+      - name: Publish @aether/gateway
+        run: npm publish -w @aether/gateway --provenance --access public
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Body is auto-generated from commits since last tag.
+          generate_release_notes: true
+          files: |
+            packages/sandbox/dist/**
+            packages/skill-loader/dist/**
+            packages/gateway/dist/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
