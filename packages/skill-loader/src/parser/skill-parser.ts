@@ -122,10 +122,15 @@ export class SkillParser {
     // Level 3: 资源层
     let level3: SkillResources | undefined;
     const codeSection = sections['code'] ?? sections['implementation'];
-    if (codeSection || frontmatter.dependencies) {
+    const depsSection = sections['dependencies'];
+    const parsedDeps = depsSection
+      ? depsSection.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('- ')).map((l) => l.slice(2).trim())
+      : [];
+    const dependencies = frontmatter.dependencies ?? parsedDeps;
+    if (codeSection || dependencies.length > 0) {
       level3 = {
         code: codeSection,
-        dependencies: frontmatter.dependencies ?? [],
+        dependencies,
         secretsRequired: frontmatter.secrets_required ?? [],
         permissions: frontmatter.permissions,
       };
@@ -158,11 +163,15 @@ export class SkillParser {
 
   private extractSections(content: string): Record<string, string> {
     const sections: Record<string, string> = {};
-    const sectionRegex = /^##\s+(.+)\n([\s\S]*?)(?=^##\s|\n$|$)/gm;
+    // Section boundary: next `## ` heading OR document end. Use non-m flag
+    // so `\n$` only matches the actual end-of-string, not every blank line.
+    // Fix from B2 retro-fit: previously the regex was /m + (?=\n$|$) which
+    // matched any blank line inside the section, truncating content.
+    const sectionRegex = /(^|\n)##\s+(.+)\n([\s\S]*?)(?=\n##\s|$)/g;
     let match;
     while ((match = sectionRegex.exec(content)) !== null) {
-      const sectionName = match[1].trim().toLowerCase();
-      sections[sectionName] = match[2].trim();
+      const sectionName = match[2].trim().toLowerCase();
+      sections[sectionName] = match[3].trim();
     }
     return sections;
   }
