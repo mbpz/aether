@@ -4,6 +4,55 @@
 
 [![CI](https://img.shields.io/badge/phase-MVP-green)](https://github.com/aether)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D20-339933)](https://nodejs.org)
+
+[English](#english-quickstart) · [中文](#核心定位)
+
+---
+
+## English Quickstart
+
+Aether is a privacy-first AI agent execution platform. Unlike cloud agents (Manus, AutoGPT) that send data to external servers, Aether executes all code and stores all memory **locally** — your data never leaves your machine.
+
+**Three pillars:**
+1. **Zero-trust sandbox** — V8 Isolate + eBPF XDP, no code escapes without Manifest authorization
+2. **Progressive disclosure** — Three-tier SKILL.md loading minimizes token consumption
+3. **Auditable execution** — SOC2-compliant audit log with HMAC-SHA256 hash chaining
+
+### Prerequisites
+
+- Node.js ≥ 20 (`node --version`)
+- macOS or Linux (Windows works for development, but eBPF kernel isolation requires Linux at runtime)
+
+### 5-line Quickstart
+
+```bash
+git clone https://github.com/aether/aether && cd aether
+npm install
+npm run build && npm test               # 187 passed, 4 known-skipped (see CHANGELOG)
+npm run gateway &                       # starts Zero-Trust Gateway on :18790
+curl -X POST http://127.0.0.1:18790/api/agent/execute \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"console.log(42)","manifestName":"default"}'
+```
+
+You should see `{"ok":true,"output":42,...}` returned from the gateway. The full eBPF kernel layer activates when you run the sandbox against a Linux host with the `deploy/ebpf/` DaemonSet deployed — see [requirements/roadmap.md §2.1](requirements/roadmap.md).
+
+### Optional: with a local LLM
+
+```bash
+LLM_BASE_URL=http://localhost:11434 LLM_MODEL=deepseek-r1 npm run gateway
+```
+
+### Next steps
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — code layout, SDD workflow (Batches 0–5), commit message format
+- [docs/adr/](docs/adr/) — 6 Architecture Decision Records covering the security posture
+- [requirements/roadmap.md](requirements/roadmap.md) — every `✅` has a machine-checkable verification command
+- [SECURITY.md](SECURITY.md) — vulnerability disclosure (30-day SLA)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant v2.1
+
+---
 
 ## 核心定位
 

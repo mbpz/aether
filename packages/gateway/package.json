@@ -1,7 +1,8 @@
 {
   "name": "@aether/gateway",
   "version": "0.1.0",
-  "description": "Aether Zero-Trust Control Plane Gateway",
+  "description": "Aether Zero-Trust Control Plane Gateway — HTTP/WebSocket entry, Manifest validation, Vault credential injection, SOC2 audit log, eBPF firewall integration.",
+  "license": "Apache-2.0",
   "main": "dist/index.js",
   "scripts": {
     "dev": "node --import tsx src/index.ts",
@@ -15,7 +16,7 @@
     "express": "^4.18.2",
     "isolated-vm": "^6.1.2",
     "js-yaml": "^4.1.0",
-    "uuid": "^9.0.0",
+    "uuid": "^14.0.1",
     "ws": "^8.16.0"
   },
   "devDependencies": {
@@ -27,5 +28,27 @@
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
     "vitest": "^4.1.5"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aether/aether.git",
+    "directory": "packages/gateway"
+  },
+  "bugs": {
+    "url": "https://github.com/aether/aether/issues"
+  },
+  "homepage": "https://github.com/aether/aether/tree/main/packages/gateway#readme",
+  "keywords": [
+    "gateway",
+    "control-plane",
+    "zero-trust",
+    "manifest",
+    "vault",
+    "SOC2",
+    "audit-log",
+    "HMAC-SHA256"
+  ]
 }

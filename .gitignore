@@ -40,3 +40,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Test coverage output (B6-8)
+/coverage/

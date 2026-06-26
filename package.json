@@ -1,26 +1,53 @@
 {
   "name": "aether",
   "version": "0.1.0",
-  "description": "Sovereign Autonomous System - 主权级通用自主执行系统",
+  "description": "Sovereign Autonomous System — a privacy-first AI agent execution platform. Zero-trust sandbox (V8 Isolate + eBPF XDP), three-tier skill disclosure, SOC2-compliant audit log.",
+  "license": "Apache-2.0",
   "private": true,
   "workspaces": [
     "packages/*"
   ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "check:wasmtime": "node scripts/check-wasmtime.mjs",
     "check:ebpf": "node scripts/check-ebpf-agent.mjs",
     "gateway": "npm run dev -w packages/gateway",
     "sandbox": "npm run dev -w packages/sandbox",
     "ui": "npm run dev -w packages/ui"
   },
-  "engines": {
-    "node": ">=20.0.0"
+  "keywords": [
+    "ai-agents",
+    "sandbox",
+    "zero-trust",
+    "eBPF",
+    "XDP",
+    "Wasmtime",
+    "V8-Isolate",
+    "privacy",
+    "local-first",
+    "agent-framework",
+    "sovereign-ai"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aether/aether.git"
   },
+  "bugs": {
+    "url": "https://github.com/aether/aether/issues",
+    "email": "security@aether.local"
+  },
+  "homepage": "https://github.com/aether/aether#readme",
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.5",
+    "esbuild": "^0.28.1",
+    "tsx": "^4.22.4",
     "vitest": "^4.1.5"
   }
 }

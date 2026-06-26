@@ -12,6 +12,7 @@
 | [004](004-package-exports-contract.md) | package.json `exports` 作为跨包通信契约 | 2026-06-20 | Batch 3 架构债 |
 | [005](005-sdd-batches.md) | SDD 分批修复流程作为工程标准 | 2026-06-20 | Batch 4 制度化 |
 | [006](006-ebpf-yaml-sync.md) | eBPF 内核层集成通过 YAML 文件桥接 | 2026-06-25 | Batch 5 架构 |
+| [007](007-scoring-semantics.md) | SecurityScorer 评分语义：avg vs min 的统一 | 2026-06-26 | Batch 6 开源治理 |
 
 ## 编写约定
 

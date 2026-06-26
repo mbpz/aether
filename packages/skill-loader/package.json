@@ -1,7 +1,8 @@
 {
   "name": "@aether/skill-loader",
   "version": "0.1.0",
-  "description": "Aether Skill System - Progressive Disclosure Loader",
+  "description": "Aether skill system — progressive three-tier disclosure, SKILL.md + OpenClaw + Manus + Skillpack formats, security auditor + ZTA scoring.",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
@@ -29,7 +30,7 @@
   "dependencies": {
     "js-yaml": "^4.1.0",
     "marked": "^12.0.0",
-    "uuid": "^9.0.0"
+    "uuid": "^14.0.1"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
@@ -37,5 +38,27 @@
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
     "vitest": "^4.1.5"
-  }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aether/aether.git",
+    "directory": "packages/skill-loader"
+  },
+  "bugs": {
+    "url": "https://github.com/aether/aether/issues"
+  },
+  "homepage": "https://github.com/aether/aether/tree/main/packages/skill-loader#readme",
+  "keywords": [
+    "skill-loader",
+    "SKILL.md",
+    "Manus",
+    "OpenClaw",
+    "Skillpack",
+    "progressive-disclosure",
+    "ZTA",
+    "security-scoring"
+  ]
 }
