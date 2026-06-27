@@ -1,0 +1,47 @@
+# Aether architecture diagram (Mermaid).
+# Rendered on GitHub natively; docusaurus can render via
+# docs/src/pages/index.tsx. This file is the single source of truth
+# for the architecture; the README ASCII version is a fallback for
+# terminals that don't render Mermaid.
+
+graph TB
+  subgraph Client["Client (curl / browser / IDE plugin)"]
+    CLI[HTTP/WebSocket client]
+  end
+
+  subgraph Edge["Public Edge"]
+    DNS[Wildcard DNS A record]
+    TLS[cert-manager + nginx-ingress]
+  end
+
+  subgraph K8s["k3s Single-Node Cluster (Hetzner CX11)"]
+    subgraph GW["Namespace: aether-demo"]
+      GPod[Gateway Deployment<br/>isolated-vm sandbox<br/>EbpfFirewall + EbpfPolicySync]
+      ConfigMap[ConfigMap<br/>examples/skills/*.md]
+      Secret[Secret<br/>LOCAL_API_TOKEN]
+    end
+
+    subgraph EBPF["System namespace (eBPF kernel layer)"]
+      BPD[DaemonSet: aether-ebpf-agent<br/>XDP + LPM_TRIE + AES-256-GCM]
+      BPFprog[BPF C program<br/>network.bpf.o]
+    end
+
+    AuditLog[audit-logs/<br/>*.jsonl + HMAC-SHA256 chain]
+    MemoryL1[L1 working memory<br/>in-process Map]
+    MemoryL2[L2 episodic<br/>JSONL on disk]
+    MemoryL3[L3 semantic<br/>TF-IDF or Ollama+Qdrant]
+  end
+
+  CLI -->|HTTPS POST /api/agent/execute| DNS
+  DNS --> TLS
+  TLS --> GPod
+  GPod -.->|reads skills from| ConfigMap
+  GPod -.->|authenticates| Secret
+  GPod -->|Writes audit events| AuditLog
+  GPod --> MemoryL1
+  GPod --> MemoryL2
+  GPod --> MemoryL3
+  GPod -->|publishes rules every 1s| BPD
+  BPD -.->|loads XDP| BPFprog
+  BPFprog -.->|drops on match| TLS
+  GPod -->|code execution| GPod
