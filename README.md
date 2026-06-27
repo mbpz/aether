@@ -5,8 +5,13 @@
 [![CI](https://img.shields.io/badge/phase-MVP-green)](https://github.com/aether)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933)](https://nodejs.org)
+[![Tests](https://img.shields.io/badge/tests-462%20passed-brightgreen)](https://github.com/aether/aether)
+[![Coverage](https://img.shields.io/badge/coverage-50.37%25-yellowgreen)](.)
+[![v0.3.0](https://img.shields.io/badge/release-v0.3.0-blue)](https://github.com/aether/aether/releases/tag/v0.3.0)
 
 [English](#english-quickstart) · [中文](#核心定位)
+
+> **🚀 Live demo**: [aether-demo.example.com](https://aether-demo.example.com/) — full Aether stack on a €5/mo Hetzner VPS, 5 demo skills ready to invoke via curl. See the [Try Aether in 5 minutes](#try-aether-in-5-minutes--public-demo) section for how to deploy your own.
 
 ---
 
@@ -42,6 +47,10 @@ You should see `{"ok":true,"output":42,...}` returned from the gateway. The full
 
 ### Try Aether in 5 minutes — public demo
 
+The maintainer maintains a live demo at **https://aether-demo.example.com/**
+(assuming `aether-demo.example.com` is the configured hostname — update
+this section when deploying to a new domain). To deploy your own:
+
 If you maintain a single-node k3s cluster (Hetzner CX11, Netcup VPS200, or
 similar — ~5€/month), you can deploy the same demo we run:
 
@@ -62,6 +71,11 @@ curl -X POST "https://aether-demo.example.com/api/agent/execute" \
   -H "Content-Type: application/json" \
   -d '{"manifestName":"hello-world","code":"return {ok:true,output:42};"}'
 ```
+
+For the full operator runbook (VPS provisioning, DNS, secrets, day-2 ops),
+see [deploy/k3s/README.md](deploy/k3s/README.md). For the design
+rationale of "self-hosted k3s on VPS vs fly.io / render / cloud-K8s",
+see [ADR-008](docs/adr/008-self-hosted-k3s-demo.md).
 
 The 5 demo skills (in `examples/skills/`):
 
