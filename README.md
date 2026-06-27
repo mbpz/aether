@@ -40,9 +40,47 @@ You should see `{"ok":true,"output":42,...}` returned from the gateway. The full
 
 ### Optional: with a local LLM
 
+### Try Aether in 5 minutes — public demo
+
+If you maintain a single-node k3s cluster (Hetzner CX11, Netcup VPS200, or
+similar — ~5€/month), you can deploy the same demo we run:
+
 ```bash
-LLM_BASE_URL=http://localhost:11434 LLM_MODEL=deepseek-r1 npm run gateway
+# 1. From this repo's GitHub Actions → "Deploy Demo" → workflow_dispatch.
+#    Requires three secrets (set once in your GitHub repo settings):
+#      DEMO_KUBECONFIG    base64-encoded kubeconfig
+#      DEMO_HOSTNAME      e.g. aether-demo.example.com
+#      DEMO_LLM_API_KEY   optional; leave empty for MockPlanner
+
+# 2. After the workflow finishes, get the auto-generated token:
+TOKEN=$(kubectl -n aether-demo get secret aether-demo-gateway-auth \
+  -o jsonpath='{.data.LOCAL_API_TOKEN}' | base64 -d)
+
+# 3. Try the 5 preinstalled demo skills:
+curl -X POST "https://aether-demo.example.com/api/agent/execute" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"manifestName":"hello-world","code":"return {ok:true,output:42};"}'
 ```
+
+The 5 demo skills (in `examples/skills/`):
+
+| Skill | Demonstrates |
+|-------|-------------|
+| `hello-world` | Baseline sandbox execution |
+| `csv-summary` | Input parsing in a sandboxed function |
+| `dns-lookup` | eBPF firewall allowlist pattern |
+| `memory-recall` | L1/L2/L3 progressive memory model |
+| `git-status` | Pure parser; gateway runs `git`, skill is sandboxed |
+
+The deploy workflow:
+- builds the demo skill registry as a ConfigMap from `examples/skills/`
+- applies `deploy/helm/aether/values-demo.yaml` (single-replica, ingress + TLS)
+- runs a smoke test against the public ingress
+- prints the demo URL + a token-resolution snippet
+
+For local-only testing (no cluster, no LLM, no network), see the
+[5-line Quickstart](#5-line-quickstart) above.
 
 ### Next steps
 

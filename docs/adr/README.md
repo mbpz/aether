@@ -13,6 +13,7 @@
 | [005](005-sdd-batches.md) | SDD 分批修复流程作为工程标准 | 2026-06-20 | Batch 4 制度化 |
 | [006](006-ebpf-yaml-sync.md) | eBPF 内核层集成通过 YAML 文件桥接 | 2026-06-25 | Batch 5 架构 |
 | [007](007-scoring-semantics.md) | SecurityScorer 评分语义：avg vs min 的统一 | 2026-06-26 | Batch 6 开源治理 |
+| [008](008-self-hosted-k3s-demo.md) | Self-hosted k3s on VPS as the demo deployment target | 2026-06-30 | Batch 11 demo deploy |
 
 ## 编写约定
 

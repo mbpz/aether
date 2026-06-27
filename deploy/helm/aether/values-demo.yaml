@@ -1,0 +1,146 @@
+# values-demo.yaml — Aether 1-click demo deployment values
+#
+# Differences from production values.yaml:
+# - replicaCount: 1 (vs 3) — demo runs on a single k3s VPS node
+# - requireImageDigest: false — demo accepts a tag, not a digest
+# - persistence.enabled: false — demo state is ephemeral
+# - ingress.tls: configured for cert-manager / nginx letsencrypt
+# - gateway.auth.token: auto-generated (do NOT set inline)
+# - gateway.env.READONLY_MODE: "false" — demo allows agent execution
+# - resources: limited to fit on a 1-CPU / 2GB VPS
+#
+# Deploy with:
+#   helm upgrade --install aether-demo ./deploy/helm/aether \
+#     -f ./deploy/helm/aether/values-demo.yaml \
+#     --namespace aether-demo --create-namespace \
+#     --set ingress.hosts[0].host=$DEMO_HOSTNAME
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/aether/gateway
+  tag: "v0.3.0"
+  digest: ""
+  pullPolicy: IfNotPresent
+
+# Demo mode: tag is enough; no digest pinning required.
+requireImageDigest: false
+
+service:
+  type: ClusterIP
+  port: 18790
+  wsPort: 18790
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+  hosts:
+    - host: aether-demo.example.com  # override with --set on install
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: aether-demo-tls
+      hosts:
+        - aether-demo.example.com
+
+gateway:
+  auth:
+    enabled: true
+    existingSecret: ""
+    existingSecretKey: LOCAL_API_TOKEN
+    token: ""  # auto-generated; printed once in NOTES.txt
+  env:
+    GATEWAY_PORT: "18790"
+    READONLY_MODE: "false"           # demo allows agent code submission
+    MEMORY_DIR: "/var/lib/aether/memory-store"
+    MEMORY_WINDOW: "50"
+
+    # LLM provider (optional). Leave empty for MockPlanner fallback.
+    LLM_BASE_URL: ""
+    LLM_MODEL: ""
+    LLM_API_KEY: ""
+
+    # Demo accepts cross-origin so the in-browser UI can call it.
+    CORS_ALLOWED_ORIGINS: "*"
+
+    # Demo skills directory (populated by ConfigMap below).
+    SKILL_REGISTRY_DIR: "/app/examples/skills"
+    MANIFEST_DIR: "/app/manifests"
+
+    # Audit: demo can be queried by anyone with the token; in production,
+    # a dedicated AUDIT_READ_TOKEN is required.
+    AUDIT_READ_TOKEN: ""
+
+# Resource limits sized for a 1 vCPU / 2 GB VPS (Hetzner CX11-class).
+resources:
+  limits:
+    cpu: "500m"
+    memory: "768Mi"
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+
+# Single-node anti-affinity is impossible; relax to soft-only.
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: aether-gateway
+          topologyKey: kubernetes.io/hostname
+
+persistence:
+  enabled: false
+  size: "1Gi"
+  hostPath: "/var/lib/aether/memory-store"
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 18790
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 18790
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+serviceMonitor:
+  enabled: false
+
+# Demo skills are mounted from a ConfigMap built from examples/skills/.
+# See .github/workflows/deploy-demo.yml for the build step.
+extraVolumes:
+  - name: demo-skills
+    configMap:
+      name: aether-demo-skills
+extraVolumeMounts:
+  - name: demo-skills
+    mountPath: /app/examples/skills
+    readOnly: true

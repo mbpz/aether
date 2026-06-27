@@ -1,0 +1,159 @@
+name: Deploy Demo
+
+# B11: 1-click demo deploy.
+#
+# Triggers a `helm upgrade --install` against a remote k3s cluster.
+# Operator workflow:
+#   1. Provision a VPS (Hetzner CX11 / Netcup VPS200 / similar).
+#   2. Install k3s + nginx-ingress + cert-manager.
+#   3. Add the kubeconfig as the DEMO_KUBECONFIG secret (base64-encoded).
+#   4. Set the DEMO_HOSTNAME secret to the public DNS name.
+#   5. Trigger this workflow from the Actions tab.
+#
+# This workflow ONLY runs on workflow_dispatch — never on push/PR.
+# Demo state is rebuilt from scratch on every deploy; it is intentionally
+# ephemeral.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag to deploy (e.g. v0.3.0)'
+        required: true
+        default: 'v0.3.0'
+      hostname_override:
+        description: 'Override DEMO_HOSTNAME for this deploy (optional)'
+        required: false
+        default: ''
+
+# Secrets required (set in GitHub repo settings → Secrets):
+#   DEMO_KUBECONFIG  — base64-encoded kubeconfig with namespace admin scope
+#   DEMO_HOSTNAME    — public DNS name of the demo (e.g. aether-demo.example.com)
+#   DEMO_LLM_API_KEY — optional; leave empty to use MockPlanner
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: helm upgrade demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: demo  # GH environment-level protection (requires manual approval if configured)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify required secrets
+        env:
+          KUBECONFIG_B64: ${{ secrets.DEMO_KUBECONFIG }}
+          HOSTNAME: ${{ secrets.DEMO_HOSTNAME }}
+        run: |
+          if [[ -z "$KUBECONFIG_B64" ]]; then
+            echo "::error::DEMO_KUBECONFIG secret is required"; exit 1
+          fi
+          if [[ -z "$HOSTNAME" && -z "${{ inputs.hostname_override }}" ]]; then
+            echo "::error::DEMO_HOSTNAME secret OR hostname_override input is required"; exit 1
+          fi
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.DEMO_KUBECONFIG }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl version --client
+
+      - name: Verify cluster reachable
+        run: kubectl cluster-info
+
+      - name: Ensure namespace
+        run: |
+          kubectl create namespace aether-demo --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create demo skills ConfigMap
+        run: |
+          # Each SKILL.md file goes in as a separate key in the ConfigMap.
+          # The helm chart mounts the whole ConfigMap as a directory.
+          kubectl -n aether-demo create configmap aether-demo-skills \
+            --from-file=hello-world.SKILL.md=examples/skills/hello-world/SKILL.md \
+            --from-file=csv-summary.SKILL.md=examples/skills/csv-summary/SKILL.md \
+            --from-file=dns-lookup.SKILL.md=examples/skills/dns-lookup/SKILL.md \
+            --from-file=memory-recall.SKILL.md=examples/skills/memory-recall/SKILL.md \
+            --from-file=git-status.SKILL.md=examples/skills/git-status/SKILL.md \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Resolve hostname
+        id: hostname
+        env:
+          HOSTNAME: ${{ secrets.DEMO_HOSTNAME }}
+          OVERRIDE: ${{ inputs.hostname_override }}
+        run: |
+          NAME="${OVERRIDE:-$HOSTNAME}"
+          echo "value=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Helm upgrade
+        env:
+          LLM_API_KEY: ${{ secrets.DEMO_LLM_API_KEY }}
+        run: |
+          # `--set` lines flow in the order: tag, hostname, LLM key (if set).
+          set -- \
+            --namespace aether-demo \
+            --create-namespace \
+            -f deploy/helm/aether/values-demo.yaml \
+            --set "image.tag=${{ inputs.tag }}" \
+            --set "ingress.hosts[0].host=${{ steps.hostname.outputs.value }}" \
+            --set "ingress.tls[0].hosts[0]=${{ steps.hostname.outputs.value }}" \
+            --wait \
+            --timeout=10m
+
+          if [[ -n "$LLM_API_KEY" ]]; then
+            set -- "$@" --set "gateway.env.LLM_API_KEY=$LLM_API_KEY"
+          fi
+
+          helm upgrade --install aether-demo ./deploy/helm/aether "$@"
+
+      - name: Verify rollout
+        run: |
+          kubectl -n aether-demo rollout status deploy/aether-demo-gateway --timeout=300s
+          kubectl -n aether-demo get pods,svc,ingress
+
+      - name: Smoke test the public endpoint
+        env:
+          HOSTNAME: ${{ steps.hostname.outputs.value }}
+        run: |
+          # Wait up to 60s for the ingress to start routing.
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 5 "https://$HOSTNAME/health" >/dev/null 2>&1; then
+              echo "✓ $HOSTNAME is healthy after ${i} attempt(s)"
+              exit 0
+            fi
+            echo "  attempt $i/12: not ready yet..."
+            sleep 5
+          done
+          echo "::error::ingress did not respond after 60s; check kubectl logs"
+          exit 1
+
+      - name: Print demo URL
+        run: |
+          echo "## 🚀 Demo deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**URL**: https://${{ steps.hostname.outputs.value }}/" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```bash' >> "$GITHUB_STEP_SUMMARY"
+          echo "TOKEN=\$(kubectl -n aether-demo get secret aether-demo-gateway-auth -o jsonpath='{.data.LOCAL_API_TOKEN}' | base64 -d)" >> "$GITHUB_STEP_SUMMARY"
+          echo "curl -X POST https://${{ steps.hostname.outputs.value }}/api/agent/execute \\" >> "$GITHUB_STEP_SUMMARY"
+          echo "  -H \"Authorization: Bearer \$TOKEN\" \\" >> "$GITHUB_STEP_SUMMARY"
+          echo "  -H 'Content-Type: application/json' \\" >> "$GITHUB_STEP_SUMMARY"
+          echo "  -d '{\"manifestName\":\"hello-world\",\"code\":\"return {ok:true,output:42};\"}'" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
