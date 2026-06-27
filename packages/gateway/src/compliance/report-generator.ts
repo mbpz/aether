@@ -26,6 +26,7 @@ export interface ComplianceSummary {
   controlsPassed: number;
   controlsFailed: number;
   controlsWarning: number;
+  controlsNotApplicable: number; // B8.4: added so consumers can sum across all 4 status counts
   criticalFindings: number;
   highFindings: number;
   mediumFindings: number;
@@ -979,6 +980,7 @@ export class ComplianceReportGenerator {
       controlsPassed,
       controlsFailed,
       controlsWarning,
+      controlsNotApplicable, // B8.4 fix: previously undefined; consumers summing across all 4 status counts saw NaN
       criticalFindings,
       highFindings,
       mediumFindings,
