@@ -1,0 +1,1 @@
+../../docs/adr/007-scoring-semantics.md

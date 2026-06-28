@@ -1,0 +1,1 @@
+../../docs/adr/008-self-hosted-k3s-demo.md

@@ -1,0 +1,70 @@
+name: Deploy Docs
+
+# B10: deploy the docusaurus site at docs-site/ to GitHub Pages.
+#
+# Triggers:
+#   - push to main:    rebuilds and re-deploys.
+#   - workflow_dispatch: manual rebuild (e.g. to test a config change).
+#
+# Required permissions:
+#   - contents: read   (to check out the repo)
+#   - pages: write    (to publish to GitHub Pages)
+#   - id-token: write (for OIDC, used by actions/deploy-pages)
+#
+# Output:
+#   - https://aether.github.io/aether/  (matches baseUrl in docusaurus.config.js)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Don't run multiple in-flight deploys for the same ref.
+concurrency:
+  group: docs-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    name: Build + deploy docs-site
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: docs-${{ runner.os }}-node${{ matrix.node }}-npm-${{ hashFiles('**/package-lock.json', 'docs-site/package.json') }}
+          restore-keys: |
+            docs-${{ runner.os }}-node${{ matrix.node }}-npm-
+
+      - name: Install docs-site deps
+        working-directory: docs-site
+        run: npm ci
+
+      - name: Build
+        working-directory: docs-site
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site/build
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

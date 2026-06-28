@@ -1,0 +1,33 @@
+/* Aether docs custom CSS. */
+
+:root {
+  --ifm-color-primary: #2563eb;          /* blue-600 */
+  --ifm-color-primary-dark: #1d4ed8;     /* blue-700 */
+  --ifm-color-primary-darker: #1e40af;   /* blue-800 */
+  --ifm-color-primary-light: #3b82f6;     /* blue-500 */
+  --ifm-color-primary-lighter: #60a5fa;  /* blue-400 */
+  --ifm-code-font-size: 92%;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #60a5fa;          /* blue-400 */
+  --ifm-color-primary-dark: #3b82f6;
+  --ifm-color-primary-darker: #2563eb;
+  --ifm-color-primary-light: #93c5fd;
+  --ifm-color-primary-lighter: #bfdbfe;
+}
+
+/* ADRs in sidebar get a small "ADR" badge prefix for visual scan-ability */
+.theme-doc-sidebar-item-link[href*='/adr/']::before {
+  content: 'ADR ';
+  font-size: 0.7em;
+  color: var(--ifm-color-emphasis-500);
+  margin-right: 0.25em;
+}
+
+/* Admonitions (:::note, :::warning) get a tighter top margin when
+   stacked — saves vertical space in long ADR tables. */
+.admonition {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}

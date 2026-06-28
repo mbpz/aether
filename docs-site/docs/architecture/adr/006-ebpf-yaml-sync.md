@@ -1,0 +1,1 @@
+../../docs/adr/006-ebpf-yaml-sync.md
