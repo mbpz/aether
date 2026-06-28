@@ -89,4 +89,41 @@ describe('BountyManager', () => {
       expect(got!.title).toBe('persist');
     });
   });
+
+  describe('acceptSubmission()', () => {
+    it('transitions a submission from pending to accepted', () => {
+      const b = mgr.createBounty({ title: 'a', description: 'd', reward: 10, createdBy: 'alice', category: 'x' });
+      const sub = mgr.submitSkill(b.id, '/path/skill.md', 'desc', 'bob');
+      // BountyManager doesn't auto-generate accepted/rejected on
+      // submitSkill (it records them as 'pending'). acceptSubmission
+      // is the public transition method.
+      expect(sub.status).toBe('pending');
+      const accepted = mgr.acceptSubmission(b.id, sub.id);
+      expect(accepted.status).toBe('accepted');
+    });
+  });
+
+  describe('rejectSubmission()', () => {
+    it('transitions a submission from pending to rejected', () => {
+      const b = mgr.createBounty({ title: 'a', description: 'd', reward: 10, createdBy: 'alice', category: 'x' });
+      const sub = mgr.submitSkill(b.id, '/path/skill.md', 'desc', 'bob');
+      const rejected = mgr.rejectSubmission(b.id, sub.id);
+      expect(rejected.status).toBe('rejected');
+    });
+  });
+
+  describe('closeBounty()', () => {
+    it('transitions a bounty to closed', () => {
+      const b = mgr.createBounty({ title: 'a', description: 'd', reward: 10, createdBy: 'alice', category: 'x' });
+      const closed = mgr.closeBounty(b.id);
+      expect(closed.status).toBe('closed');
+    });
+
+    it('persists the closed status', () => {
+      const b = mgr.createBounty({ title: 'a', description: 'd', reward: 10, createdBy: 'alice', category: 'x' });
+      mgr.closeBounty(b.id);
+      const mgr2 = new BountyManager(workdir);
+      expect(mgr2.getBounty(b.id)?.status).toBe('closed');
+    });
+  });
 });
