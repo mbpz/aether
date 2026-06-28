@@ -74,11 +74,26 @@ export interface LLMResponse {
 
 export interface LLMProviderConfig {
   /** Provider 类型标识 */
-  type: 'openai' | 'ollama' | 'openrouter' | 'custom';
-  /** API 基础地址，如 https://api.openai.com/v1 或 http://localhost:11434/v1 */
-  baseUrl: string;
-  /** API Key（Ollama 可为空） */
+  type: 'openai' | 'ollama' | 'openrouter' | 'anthropic' | 'gemini' | 'bedrock' | 'custom';
+  /**
+   * OpenAI-compatible: `https://api.openai.com/v1` (default if omitted)
+   * Anthropic:           `https://api.anthropic.com`
+   * Gemini:              `https://generativelanguage.googleapis.com/v1beta`
+   * Bedrock:             `https://bedrock-runtime.<region>.amazonaws.com`
+   */
+  baseUrl?: string;
+  /**
+   * OpenAI / Gemini: sent as `Authorization: Bearer <key>`.
+   * Anthropic:        sent as `x-api-key: <key>` + `anthropic-version`.
+   * Bedrock:          used as the AWS access key id (apiSecret is the
+   *                   secret access key for SigV4 signing).
+   * Ollama:           may be any non-empty string (not validated).
+   */
   apiKey?: string;
+  /** Bedrock SigV4: AWS secret access key. Required when type='bedrock'. */
+  apiSecret?: string;
+  /** Bedrock: AWS region (e.g. 'us-east-1'). Required when type='bedrock'. */
+  region?: string;
   /** 使用的模型名称 */
   model: string;
   /** 请求超时 ms，默认 60000 */
@@ -111,5 +126,20 @@ export const PROVIDER_PRESETS: Record<string, Partial<LLMProviderConfig>> = {
     type: 'custom',
     baseUrl: 'https://api.deepseek.com/v1',
     model: 'deepseek-chat',
+  },
+  anthropic: {
+    type: 'anthropic',
+    baseUrl: 'https://api.anthropic.com',
+    model: 'claude-3-5-haiku-20241022',
+  },
+  gemini: {
+    type: 'gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    model: 'gemini-1.5-flash',
+  },
+  bedrock: {
+    type: 'bedrock',
+    model: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    region: 'us-east-1',
   },
 };

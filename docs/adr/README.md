@@ -15,6 +15,7 @@
 | [007](007-scoring-semantics.md) | SecurityScorer 评分语义：avg vs min 的统一 | 2026-06-26 | Batch 6 开源治理 |
 | [008](008-self-hosted-k3s-demo.md) | Self-hosted k3s on VPS as the demo deployment target | 2026-06-30 | Batch 11 demo deploy |
 | [009](009-demo-runbook.md) | Demo runbook: VPS + k3s + ingress-nginx (B12) | 2026-07-02 | Batch 12 deploy runbook |
+| [010](010-multi-llm-provider.md) | Multi-LLM Provider dispatch (Anthropic / Gemini / Bedrock) | 2026-07-04 | Batch 16 multi-LLM |
 
 ## 编写约定
 
