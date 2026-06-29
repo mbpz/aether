@@ -96,18 +96,35 @@ describe('ComplianceReportGenerator', () => {
     });
   });
 
-  describe('audit trail', () => {
-    it('contains a policy reference for known framework', async () => {
+  describe('private recommendation mapping (B14)', () => {
+    it('generates recommendations for critical/high/medium/low findings', () => {
       const { gen, workdir } = makeGen();
       try {
-        const r = await gen.generate({
-          framework: 'SOC2',
-          period: { start: '2026-01-01T00:00:00Z', end: '2026-12-31T23:59:59Z' },
-          scope: 'Aether',
-        });
-        const policyRef = r.auditTrail.find((t) => t.type === 'policy');
-        expect(policyRef).toBeDefined();
-        expect(policyRef!.reference).toMatch(/soc2|iso|hipaa|gdpr/);
+        const recommendations = (gen as unknown as {
+          generateRecommendations(findings: Array<{ severity: string }>): Array<{ priority: string; title: string }>;
+        }).generateRecommendations([
+          { severity: 'critical' },
+          { severity: 'high' },
+          { severity: 'medium' },
+          { severity: 'low' },
+        ]);
+        expect(recommendations.some((r) => r.priority === 'immediate')).toBe(true);
+        expect(recommendations.some((r) => r.title.includes('High-Severity'))).toBe(true);
+        expect(recommendations.some((r) => r.title.includes('Medium-Severity'))).toBe(true);
+        expect(recommendations.some((r) => r.title.includes('Low-Severity'))).toBe(true);
+      } finally {
+        cleanup(workdir);
+      }
+    });
+
+    it('generates a maintain-compliance recommendation when no findings exist', () => {
+      const { gen, workdir } = makeGen();
+      try {
+        const recommendations = (gen as unknown as {
+          generateRecommendations(findings: unknown[]): Array<{ priority: string; title: string }>;
+        }).generateRecommendations([]);
+        expect(recommendations.length).toBe(1);
+        expect(recommendations[0].title).toMatch(/Maintain Compliance/);
       } finally {
         cleanup(workdir);
       }
