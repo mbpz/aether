@@ -5,9 +5,9 @@
 [![CI](https://img.shields.io/badge/phase-MVP-green)](https://github.com/aether)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-462%20passed-brightgreen)](https://github.com/aether/aether)
-[![Coverage](https://img.shields.io/badge/coverage-50.37%25-yellowgreen)](.)
-[![v0.3.0](https://img.shields.io/badge/release-v0.3.0-blue)](https://github.com/aether/aether/releases/tag/v0.3.0)
+[![Tests](https://img.shields.io/badge/tests-526%20passed-brightgreen)](https://github.com/aether/aether)
+[![Coverage](https://img.shields.io/badge/coverage-53.58%25-yellowgreen)](.)
+[![v0.3.0](https://img.shields.io/badge/release-v0.4.0-blue)](https://github.com/aether/aether/releases/tag/v0.4.0)
 
 [English](#english-quickstart) · [中文](#核心定位)
 

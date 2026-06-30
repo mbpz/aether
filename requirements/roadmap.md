@@ -1,9 +1,9 @@
 # Aether 产品路线图
 
-> **更新时间：2026-06-20**
+> **更新时间：2026-06-30**
 > 基于竞品分析（AutoGPT/MetaGPT/CrewAI/OpenClaw/E2B/Letta/MemGPT/Skillpack等）全面增强
 >
-> **本次更新**：用 SDD 流程（Batch 0–3）把"已完成 ✅"对齐到代码事实，每个状态都给可机器执行的验证命令。任何 ✅ 必须有一行 `grep`/`npm test`/`curl` 能证明。详见 [ADR-005 SDD 流程](../docs/adr/005-sdd-batches.md)。
+> **v0.4.0 状态**：项目版本进入 v0.4.0，526 tests passing / 53.58% coverage / 0 audit vuln / 10 ADRs。v0.4.0 是首批 5 批 v0.3.x + 4 批 v0.2.x + 1 批 v0.1.0 + 14 批 retro-fit (B0–B14) 的封装。详见 [CHANGELOG](../CHANGELOG.md) 与 [ADR-005 SDD 流程](../docs/adr/005-sdd-batches.md)。
 
 ---
 

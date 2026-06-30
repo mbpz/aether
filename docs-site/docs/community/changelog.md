@@ -13,12 +13,18 @@ the repo; this page is for discoverability via docusaurus.
 
 ## Recent releases
 
-- **v0.3.2** — Terminal recordings + arch diagram (B13)
-- **v0.3.1** — Demo runbook + install.sh (B12)
-- **v0.3.0** — 1-click demo deploy (B11)
-- **v0.2.2** — B8.5: coverage 46.46% → 50.37%
-- **v0.2.1** — B8.4: coverage 42.17% → 46.46%
-- **v0.2.0** — B8.3: coverage 40.7% → 42.17%
-- **v0.1.0** — First tagged release. 192 tests, 19.68% coverage, 0
-  audit vulnerabilities. Establishes the fail-closed posture (ADR-001)
-  and the SDD workflow (ADR-005).
+- **v0.4.0** (2026-06-30) — "Publishable + try-it" release. 18
+  batches (B0–B14) over 12 point releases. 526 tests, 53.58%
+  coverage, 0 audit vulns, 10 ADRs, 7 LLM providers, 1-click demo
+  deploy, docusaurus docs site. See the
+  [release notes](#).
+- **v0.3.x** (B11–B16) — user-facing surface beyond code: 1-click
+  demo deploy (B11), operator runbook (B12), vhs tapes + arch
+  diagram (B13), docusaurus site (B10), multi-LLM dispatch
+  (B16). Coverage 50.37% → 53.58%.
+- **v0.2.x** (B6–B8.5) — open-source governance + CI matrix +
+  test retro-fit. Coverage 19.68% → 50.37%. Found 4 latent bugs
+  via the retro-fit.
+- **v0.1.0** (B0–B5) — first tagged release. 192 tests, 19.68%
+  coverage, 0 audit vulns. Establishes the fail-closed posture
+  (ADR-001) and the SDD workflow (ADR-005).

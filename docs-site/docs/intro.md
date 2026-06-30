@@ -42,10 +42,10 @@ servers, Aether:
 
 ## Project status
 
-- **Current release**: v0.3.0 (March 2026)
+- **Current release**: v0.4.0 (June 2026)
 - **License**: Apache-2.0
-- **Tests**: 462 passing, 0 skipped
-- **Coverage**: 50.37% statements
+- **Tests**: 526 passing, 0 skipped
+- **Coverage**: 53.58% statements
 - **Audit**: 0 npm vulnerabilities
 - **ADRs**: 9 (see the [ADRs](architecture/intro.md#architecture-decision-records) page)
 
