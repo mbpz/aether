@@ -8,7 +8,10 @@
  *   aether-audit list  [--limit N] [--json]           recent audit entries
  *   aether-audit verify                                verify hash-chain integrity (SOC2)
  *   aether-audit stats                                per-category counts
- *   aether-audit export <path>                        export a single-file verifiable artifact
+ *   aether-audit export <path> [--format=soc2]        export a single-file verifiable artifact
+ *
+ *   --format=soc2  produces a compliance artifact with SOC2 CC1-CC9 control
+ *                   mapping, control coverage summary, and signature manifest.
  *
  * Environment: AUDIT_SIGNING_KEY (or AUDIT_SIGNING_KEY_FILE), AUDIT_LOG_DIR.
  * The signing key is required (>= 32 chars) — there is no default.
@@ -56,6 +59,9 @@ function parseArgs(argv) {
     else if (a === '--resource-type') opts.resourceType = rest[++i];
     else if (a === '--resource-id') opts.resourceId = rest[++i];
     else if (a === '--json') opts.json = true;
+    else if (a === '--format') opts.format = rest[++i];
+    else if (a === '--since') opts.since = rest[++i];
+    else if (a === '--until') opts.until = rest[++i];
     else if (a.startsWith('--')) { console.error(`Unknown flag: ${a}`); process.exit(2); }
     else opts.positional.push(a);
   }
@@ -144,10 +150,35 @@ async function cmdStats() {
 async function cmdExport(opts) {
   const [outputPath] = opts.positional;
   if (!outputPath) {
-    console.error('Usage: aether-audit export <output-path>');
+    console.error('Usage: aether-audit export <output-path> [--format=soc2] [--since ISO] [--until ISO]');
     process.exit(2);
   }
 
+  const format = opts.format ?? 'artifact';
+  if (!['artifact', 'soc2'].includes(format)) {
+    console.error(`Unknown format: ${format} (supported: artifact, soc2)`);
+    process.exit(2);
+  }
+
+  const logDir = process.env.AUDIT_LOG_DIR ?? './runtime/audit';
+  const signingKey = process.env.AUDIT_SIGNING_KEY || readKeyFromEnv() || null;
+
+  if (format === 'soc2') {
+    const { buildSOC2Export } = await import(`${GATEWAY_SRC}/audit/soc2-export.ts`);
+    const report = buildSOC2Export({ logDir, signingKey, since: opts.since, until: opts.until });
+
+    mkdirSync(dirname(resolve(outputPath)), { recursive: true });
+    writeFileSync(outputPath, JSON.stringify(report, null, 2) + '\n', 'utf-8');
+
+    console.log(`✓ SOC2 export → ${outputPath}`);
+    console.log(`  integrity:     ${report.integrity.valid ? '✅ VALID' : '❌ BROKEN'}  (${report.integrity.entriesVerified} entries)`);
+    console.log(`  control coverage: ${report.controlCoverage.covered} covered / ${report.controlCoverage.partial} partial / ${report.controlCoverage.gap} gap (of ${report.controlCoverage.total})`);
+    console.log(`  headHash:      ${report.integrity.headHash}`);
+    console.log(`  key fingerprint: ${report.integrity.signingKeyFingerprint}`);
+    return;
+  }
+
+  // Legacy artifact export (raw entries + manifest).
   const logFiles = logger().logFilePaths();
   const allEntries = [];
   for (const file of logFiles) {
@@ -158,7 +189,7 @@ async function cmdExport(opts) {
   }
 
   const signingKeyHash = createHash('sha256')
-    .update(process.env.AUDIT_SIGNING_KEY || readKeyFromEnv())
+    .update(signingKey || '')
     .digest('hex')
     .slice(0, 16);
 
@@ -167,7 +198,7 @@ async function cmdExport(opts) {
     version: 1,
     exportedAt: new Date().toISOString(),
     generator: 'aether-audit CLI',
-    signingKeyFingerprint: signingKeyHash,   // not the key itself
+    signingKeyFingerprint: signingKeyHash,
     entryCount: allEntries.length,
     sequenceRange: allEntries.length > 0
       ? { first: allEntries[0].sequence, last: allEntries[allEntries.length - 1].sequence }
