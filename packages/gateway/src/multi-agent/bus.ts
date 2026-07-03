@@ -1,6 +1,12 @@
 // EP-05: MessageBus - 内存队列 + AES-256-GCM 加密 + 订阅机制
 // 消息持久化到 .agent-workspace/bus.jsonl
 // 加密层：使用 EphemeralKeyManager 管理会话密钥
+//
+// SHELF STATUS (Council Verdict 2026-07-02): Real code, production-wired via
+// routes/multi-agent.ts. Pre-competent — no external usage verified. If zero
+// external signal by 2026-08-15, this directory moves to multi-agent/archive/.
+// The bus subscriber decryption fix (2026-07-02) resolves the last known bug
+// where subscribers received ciphertext instead of plaintext.
 
 import { randomUUID } from 'crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'fs';
@@ -281,10 +287,40 @@ export class MessageBus {
 
   private _notifySubscriber(agentId: string, msg: Message): void {
     const handler = this.subscribers.get(agentId);
-    if (handler) {
-      try { handler(msg); } catch (err) {
-        console.warn(`[aether:message-bus] Subscriber error for ${agentId}:`, err);
-      }
+    if (!handler) return;
+
+    // Subscribers receive the DECRYPTED payload — the bus holds every
+    // participant's session key, so it can transparently decrypt on the
+    // subscriber's behalf. Without this, a subscriber reading msg.payload
+    // would see the raw EncryptedPayload { keyId, iv, ciphertext, authTag }
+    // instead of the original object.
+    const delivery = msg.encrypted && msg.payload
+      ? this._decryptCopy(msg)
+      : msg;
+
+    try { handler(delivery); } catch (err) {
+      console.warn(`[aether:message-bus] Subscriber error for ${agentId}:`, err);
+    }
+  }
+
+  /**
+   * Return a shallow copy of `msg` with its payload decrypted in-place on
+   * the copy. The original queue message is left untouched so that a later
+   * consume() call still sees encrypted=true and can decrypt normally.
+   */
+  private _decryptCopy(msg: Message): Message {
+    const senderKey = msg.keyId ? this.keyManager.getKey(msg.keyId) : null;
+    if (!senderKey) {
+      // Key expired or unknown — deliver the raw message; the subscriber
+      // can decide how to handle the undecryptable payload.
+      return { ...msg };
+    }
+    try {
+      const plaintext = decryptPayload(msg.payload as EncryptedPayload, senderKey);
+      return { ...msg, payload: plaintext, encrypted: false };
+    } catch {
+      // Decryption failed (tampered authTag?) — deliver raw.
+      return { ...msg };
     }
   }
 

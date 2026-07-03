@@ -1,106 +1,63 @@
-# Aether — 主权级通用自主执行系统 (SAS)
+# Aether — Multi-Provider Local-First Agent Framework
 
-> **Sovereign Autonomous System**: AI agents that never leak data, never call home, and execute with cryptographic verifiability.
+> **AI agents that run anywhere, lock nowhere.** Execute locally on any LLM — Claude, Gemini, Bedrock, Ollama, DeepSeek — with a V8-Isolate sandbox and three-tier skill disclosure.
 
-[![CI](https://img.shields.io/badge/phase-MVP-green)](https://github.com/aether)
+[![CI](https://img.shields.io/badge/phase-MVP-green)](https://github.com/aether/aether)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-526%20passed-brightgreen)](https://github.com/aether/aether)
-[![Coverage](https://img.shields.io/badge/coverage-53.58%25-yellowgreen)](.)
-[![v0.3.0](https://img.shields.io/badge/release-v0.4.0-blue)](https://github.com/aether/aether/releases/tag/v0.4.0)
+[![Tests](https://img.shields.io/badge/tests-548%20passed-brightgreen)](#)
+[![Coverage](https://img.shields.io/badge/see-CI-yellowgreen)](#)
 
 [English](#english-quickstart) · [中文](#核心定位)
 
-> **🚀 Live demo**: [aether-demo.example.com](https://aether-demo.example.com/) — full Aether stack on a €5/mo Hetzner VPS, 5 demo skills ready to invoke via curl. See the [Try Aether in 5 minutes](#try-aether-in-5-minutes--public-demo) section for how to deploy your own.
+---
+
+> **Trust as trajectory.** Local V8 sandbox Day 0. Route to any provider Day 1. [Audit the trust boundary](docs/compositions.md) as it graduates Day 2 — `aether-audit verify` proves the chain hasn't been tampered with.
 
 ---
 
 ## English Quickstart
 
-Aether is a privacy-first AI agent execution platform. Unlike cloud agents (Manus, AutoGPT) that send data to external servers, Aether executes all code and stores all memory **locally** — your data never leaves your machine.
+Aether is a privacy-first AI agent execution platform. Unlike cloud agents (Manus, AutoGPT) that send data to external servers, Aether executes all code and stores all memory **locally**.
 
 **Three pillars:**
-1. **Zero-trust sandbox** — V8 Isolate + eBPF XDP, no code escapes without Manifest authorization
-2. **Progressive disclosure** — Three-tier SKILL.md loading minimizes token consumption
-3. **Auditable execution** — SOC2-compliant audit log with HMAC-SHA256 hash chaining
+1. **Zero-trust sandbox** — V8 Isolate with fail-closed policy, no native bindings escape without Manifest authorization
+2. **Multi-provider dispatch** — one config switches between Anthropic, Gemini, Bedrock, Ollama, OpenRouter, DeepSeek, or any OpenAI-compatible endpoint
+3. **Progressive disclosure** — three-tier SKILL.md loading cuts token consumption by ≥60% (benchmarked, reproducible)
 
-### Prerequisites
-
-- Node.js ≥ 20 (`node --version`)
-- macOS or Linux (Windows works for development, but eBPF kernel isolation requires Linux at runtime)
-
-### 5-line Quickstart
+### Try it locally (30 seconds)
 
 ```bash
 git clone https://github.com/aether/aether && cd aether
 npm install
-npm run build && npm test               # 187 passed, 4 known-skipped (see CHANGELOG)
+npm run build && npm test               # ~548 tests, all green
 npm run gateway &                       # starts Zero-Trust Gateway on :18790
 curl -X POST http://127.0.0.1:18790/api/agent/execute \
   -H 'Content-Type: application/json' \
   -d '{"code":"console.log(42)","manifestName":"default"}'
 ```
 
-You should see `{"ok":true,"output":42,...}` returned from the gateway. The full eBPF kernel layer activates when you run the sandbox against a Linux host with the `deploy/ebpf/` DaemonSet deployed — see [requirements/roadmap.md §2.1](requirements/roadmap.md).
+You should see `{"ok":true,"output":42,...}` returned. No cloud, no API key, no data leaving your machine.
 
-### Optional: with a local LLM
-
-### Try Aether in 5 minutes — public demo
-
-The maintainer maintains a live demo at **https://aether-demo.example.com/**
-(assuming `aether-demo.example.com` is the configured hostname — update
-this section when deploying to a new domain). To deploy your own:
-
-If you maintain a single-node k3s cluster (Hetzner CX11, Netcup VPS200, or
-similar — ~5€/month), you can deploy the same demo we run:
+### With a local or remote LLM
 
 ```bash
-# 1. From this repo's GitHub Actions → "Deploy Demo" → workflow_dispatch.
-#    Requires three secrets (set once in your GitHub repo settings):
-#      DEMO_KUBECONFIG    base64-encoded kubeconfig
-#      DEMO_HOSTNAME      e.g. aether-demo.example.com
-#      DEMO_LLM_API_KEY   optional; leave empty for MockPlanner
+# Local (Ollama)
+LLM_BASE_URL=http://localhost:11434 LLM_MODEL=deepseek-r1 npm run gateway
 
-# 2. After the workflow finishes, get the auto-generated token:
-TOKEN=$(kubectl -n aether-demo get secret aether-demo-gateway-auth \
-  -o jsonpath='{.data.LOCAL_API_TOKEN}' | base64 -d)
+# Remote (Anthropic)
+LLM_BASE_URL=https://api.anthropic.com LLM_API_KEY=sk-ant-... LLM_MODEL=claude-sonnet-4-7 npm run gateway
 
-# 3. Try the 5 preinstalled demo skills:
-curl -X POST "https://aether-demo.example.com/api/agent/execute" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"manifestName":"hello-world","code":"return {ok:true,output:42};"}'
+# Remote (Gemini)
+LLM_BASE_URL=https://generativelanguage.googleapis.com LLM_API_KEY=... LLM_MODEL=gemini-2.5-pro npm run gateway
 ```
-
-For the full operator runbook (VPS provisioning, DNS, secrets, day-2 ops),
-see [deploy/k3s/README.md](deploy/k3s/README.md). For the design
-rationale of "self-hosted k3s on VPS vs fly.io / render / cloud-K8s",
-see [ADR-008](docs/adr/008-self-hosted-k3s-demo.md).
-
-The 5 demo skills (in `examples/skills/`):
-
-| Skill | Demonstrates |
-|-------|-------------|
-| `hello-world` | Baseline sandbox execution |
-| `csv-summary` | Input parsing in a sandboxed function |
-| `dns-lookup` | eBPF firewall allowlist pattern |
-| `memory-recall` | L1/L2/L3 progressive memory model |
-| `git-status` | Pure parser; gateway runs `git`, skill is sandboxed |
-
-The deploy workflow:
-- builds the demo skill registry as a ConfigMap from `examples/skills/`
-- applies `deploy/helm/aether/values-demo.yaml` (single-replica, ingress + TLS)
-- runs a smoke test against the public ingress
-- prints the demo URL + a token-resolution snippet
-
-For local-only testing (no cluster, no LLM, no network), see the
-[5-line Quickstart](#5-line-quickstart) above.
 
 ### Next steps
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) — code layout, SDD workflow (Batches 0–5), commit message format
-- [docs/adr/](docs/adr/) — 6 Architecture Decision Records covering the security posture
-- [requirements/roadmap.md](requirements/roadmap.md) — every `✅` has a machine-checkable verification command
+- [examples/token-benchmark/](examples/token-benchmark/) — reproduce the ≥60% token reduction claim
+- [CONTRIBUTING.md](CONTRIBUTING.md) — code layout, SDD workflow, commit message format
+- [docs/adr/](docs/adr/) — Architecture Decision Records covering the security posture
+- [requirements/roadmap.md](requirements/roadmap.md) — full roadmap with machine-checkable verification commands
 - [SECURITY.md](SECURITY.md) — vulnerability disclosure (30-day SLA)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant v2.1
 
@@ -108,198 +65,67 @@ For local-only testing (no cluster, no LLM, no network), see the
 
 ## 核心定位
 
-Aether is a privacy-first AI agent execution platform. Unlike cloud agents (Manus, AutoGPT) that send data to external servers, Aether executes all code and stores all memory **locally** — your data never leaves your machine.
+Aether 是一个隐私优先的 AI Agent 执行平台。与云端 Agent（Manus、AutoGPT）不同，Aether 在本地执行所有代码和存储所有记忆——你的数据永不离开设备。
 
-**Three pillars:**
-1. **Zero-trust sandbox** — WASM + eBPF isolation, no code escapes without Manifest authorization
-2. **Progressive disclosure** — Three-tier SKILL.md loading minimizes token consumption
-3. **Auditable execution** — SOC2-compliant audit log with HMAC-SHA256 hash chaining
+**三大支柱：**
+1. **零信任沙箱** — V8 Isolate + 故障关闭策略，无 Manifest 授权不得逃逸
+2. **多 LLM 调度** — 一个配置在 Anthropic、Gemini、Bedrock、Ollama、DeepSeek 间切换
+3. **三级渐进披露** — 减少 ≥60% Token 消耗（可复现基准测试）
 
-## 核心优势（已完成）
+## 核心优势
 
 | 能力 | Aether | 竞品 |
 |------|--------|------|
-| 沙箱安全 | WASM/eBPF 双重隔离 | Docker/firecracker |
+| 沙箱安全 | V8 Isolate 故障关闭（[长期路线图](requirements/roadmap/long-term.md)） | Docker/Firecracker/无 |
 | 隐私 | 100% 本地，数据不离开设备 | 云端黑盒 |
-| 三级披露 | 唯一完整实现 | 无 |
-| 多Agent | 独立子沙箱 + AES-256-GCM 加密总线 | 社区hack |
-| 记忆系统 | L1/L2/L3 三层 + Ollama+Qdrant | TF-IDF |
+| 三级披露 | 唯一完整实现（[可复现](examples/token-benchmark/)） | 无 |
+| 多 LLM | Anthropic + Gemini + Bedrock + Ollama + DeepSeek | 通常锁定单一 |
 | 技能兼容 | SKILL.md + OpenClaw + Manus 全兼容 | 仅单一格式 |
-| 自调试 | CodeAct 闭环 | 无 |
-| SOC2审计 | HMAC-SHA256 hash chaining | 无 |
 
 ## 快速开始
 
 ```bash
-# 启动 Gateway（本地优先，零信任）
-npm run gateway
+npm install
+npm run build && npm test               # 526 tests
+npm run gateway                          # 启动 Gateway 在 :18790
 
-# 或带 LLM（使用本地 Ollama）
+# 带本地 LLM（Ollama）
 LLM_BASE_URL=http://localhost:11434 LLM_MODEL=deepseek-r1 npm run gateway
 
-# Agent 执行示例
+# 执行示例
 curl -X POST http://localhost:18790/api/agent/execute \
   -H "Content-Type: application/json" \
   -d '{"code": "console.log(42)", "manifestName": "default"}'
 ```
 
-## 项目结构
-
-```
-packages/
-├── gateway/          # 零信任控制平面 (EP-02)
-│   └── src/
-│       ├── audit/         # SOC2 审计日志 (HMAC-SHA256)
-│       ├── sandbox/       # SandboxBridge (eBPF 集成)
-│       ├── memory/        # L1/L2/L3 分层记忆
-│       ├── multi-agent/   # MessageBus + TeamOrchestrator
-│       ├── agent-loop/    # AgentRunner (Mock→LLM 可选)
-│       └── llm/           # LLMPlanner (ReAct 循环)
-├── sandbox/          # WASM 隔离执行层 (EP-01)
-│   └── src/
-│       ├── security/      # EbpfFirewall + SecurityPolicy
-│       └── codeact/       # CodeAct 自调试引擎
-└── skill-loader/     # 技能加载器 (EP-03)
-    └── src/
-        ├── audit/         # SkillSecurityAuditor
-        └── parser/        # SKILL.md + Skillpack 解析器
-
-deploy/helm/aether/   # K8s Helm Chart (EP-06)
-requirements/          # 需求文档 + 路线图
-```
-
-## 已完成功能
-
-### EP-01 安全沙箱 ✅
-- `isolated-vm` V8 Isolate（安全加固）
-- Manifest 预执行审计
-- 移除 `safe-eval` 降级
-- eBPF 防火墙集成（App 层策略执行）
-
-### EP-02 零信任控制平面 ✅
-- Gateway HTTP/WebSocket 服务
-- Manifest 解析器
-- Vault 凭证注入器（受 Manifest 管控）
-- SOC2 审计日志（HMAC-SHA256 hash chaining）
-
-### EP-03 技能系统 ✅
-- SKILL.md 全格式兼容（Manus/OpenClaw/Aether）
-- 三级渐进式披露（Level 1/2/3）
-- Skillpack 锁文件格式兼容
-- 安全审计自动化（skill-auditor.ts）
-
-### EP-04 分层记忆 ✅
-- L1 Working / L2 Episodic / L3 Semantic
-- O(N²) → 阈值策略优化
-- Ollama 密集嵌入（nomic-embed-text）
-- Qdrant 本地向量库
-- L2→L3 自动压缩提炼
-
-### EP-05 多Agent协作 ✅
-- MessageBus（内存队列 + JSONL 持久化）
-- AgentRegistry
-- AES-256-GCM 加密消息总线
-- Per-Agent 独立沙箱
-- TeamOrchestrator（planner/executor/reviewer）
-- Sequential / Parallel / Hierarchical 模式
-
-### EP-06 企业级部署 ✅
-- Helm Chart（K8s 3副本 + anti-affinity）
-- SOC2 审计日志
-- ConfigMap / Secret / Ingress / PVC
-
-## 正在进行
-
-| 任务 | 优先级 | 状态 |
-|------|--------|------|
-| Wasmtime Runtime | P0 | 调研完成，官方 npm 包不可用 |
-| Kata + Firecracker | P1 | Phase 3 |
-| 技能市场 | P1 | Phase 3 |
-
-## 配置示例
+### 可复现基准测试
 
 ```bash
-# .env (Gateway)
-GATEWAY_PORT=18790
-LOCAL_TOKEN_AUTH_REQUIRED=false
-READONLY_MODE=true
-MEMORY_DIR=./memory-store
-
-# LLM (可选，不配置则使用 MockPlanner)
-LLM_BASE_URL=http://localhost:11434
-LLM_MODEL=deepseek-r1
-
-# Audit
-AUDIT_LOG_DIR=./runtime/audit
-AUDIT_SIGNING_KEY=your-secret-key
+# 验证 "≥60% token 减少" 声明
+node examples/token-benchmark/run-benchmark.mjs
 ```
 
-## 架构图
+## 安全模型
 
-参考 [docs/assets/architecture.mmd](docs/assets/architecture.mmd) — Mermaid 源（GitHub 原生渲染 / docusaurus 通用）。ASCII fallback：
-
-```
-┌───────────────────────────── Public Edge ──────────────────────────────┐
-│   Client (curl/browser)                                                │
-│        │                                                               │
-│        ▼ HTTPS + DNS wildcard                                          │
-│   ┌────────────────┐    ┌────────────────┐    ┌──────────────────┐   │
-│   │ cert-manager    │    │ nginx-ingress   │    │ TLS (let's enc)  │   │
-│   │ ACME issuer     │ ──▶│ hostPort 80/443 │ ──▶│ per-host cert    │   │
-│   └────────────────┘    └────────────────┘    └──────────────────┘   │
-└───────────────────────────────────────────────────────────────────────┘
-                                          │
-                                          ▼
-┌──────────────────────── k3s Single-Node Cluster ────────────────────────┐
-│  ┌── Namespace: aether-demo ───────────────────────────────────────┐   │
-│  │  ┌────────────────┐    ┌────────────────┐    ┌──────────────┐  │   │
-│  │  │ Manifest Engine │    │ Audit Logger   │    │ Secret       │  │   │
-│  │  │ + SkillRegistry │ ──▶│ HMAC-SHA256    │ ──▶│ LOCAL_API_   │  │   │
-│  │  └────────────────┘    │ hash chain     │    │ TOKEN        │  │   │
-│  │         │                └────────────────┘    └──────────────┘  │   │
-│  │         ▼                                                       │   │
-│  │  ┌────────────────────────────────────────────────────────────┐  │   │
-│  │  │  SandboxBridge + EbpfFirewall + EbpfPolicySync            │  │   │
-│  │  │  ┌──────────────────────────────────────────────────────┐  │  │   │
-│  │  │  │   isolated-vm V8 Isolate  (CodeAct + SecurityPolicy) │  │  │   │
-│  │  │  └──────────────────────────────────────────────────────┘  │  │   │
-│  │  │                          │ every 1s                          │  │   │
-│  │  └──────────────────────────┼─────────────────────────────────┘  │   │
-│  └─────────────────────────────┼─────────────────────────────────────┘   │
-│                                ▼ YAML publish                          │
-│  ┌── Namespace: kube-system (eBPF kernel layer) ──────────────────┐  │
-│  │  ┌────────────────────────┐    ┌──────────────────────────────┐ │  │
-│  │  │ aether-ebpf-agent (DS)  │ ──▶│ BPF XDP program (kernel)     │ │  │
-│  │  │ XDP/LPM_TRIE + AES-GCM │    │ default-deny at NIC level     │ │  │
-│  │  └────────────────────────┘    └──────────────────────────────┘ │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│                                                                       │
-│  Storage: ConfigMap (skills), PersistentVolume (memory-store),        │
-│           audit-logs/*.jsonl                                          │
-└───────────────────────────────────────────────────────────────────────┘
-```
-
-## 安全模型（OWASP Agentic Top 10）
+Aether 的安全设计覆盖 [OWASP Agentic Top 10](https://owasp.org/www-project-agentic-ai-threats/)。详见 [SECURITY.md](SECURITY.md)。
 
 | 威胁 | Aether 防护 |
 |------|------------|
 | 01 Prompt Injection | Manifest 预审计 + 静态扫描 |
-| 02 Data Leakage | eBPF 网络拦截 |
-| 03 Sandbox Escape | WASM 线性内存 |
-| 04 Agent Hijacking | Vault 零信任注入 |
+| 02 Data Leakage | V8 Isolate 沙箱隔离 |
+| 03 Sandbox Escape | V8 线性内存 + 故障关闭 |
+| 04 Agent Hijacking | Manifest 凭证管控 |
 | 05 Overtrusting | 三级披露 + 显式权限 |
 | 06 Unbounded Execution | MAX_STEPS + timeout |
-| 07 Memory Poisoning | 重要性评分 + 遗忘机制 |
-| 08 Credential Exposure | Vault 注入 + 环境变量 |
-| 09 Intent Misalignment | 审计日志 + Manifest |
-| 10 Model Poisoning | 技能签名 + 安全评分 |
 
-## 下一步
+> **动态漏洞证明：** `packages/gateway/src/sandbox/exploit-demonstration.test.ts` 包含实际执行的 exploit 测试（`child_process.execSync("id")` 被沙箱阻断）。运行 `npx vitest run` 验证。
 
-1. **Wasmtime Runtime** — 等待官方 npm 包发布或使用 wasmtime-py
-2. **Kata Containers** — Phase 3 企业级安全模式
-3. **技能市场** — Phase 3 开发者生态
+## 为什么选 Aether？
+
+如果你担心云端 AI Agent 的隐私问题（数据被用于训练、凭证泄露、不受控的执行），Aether 是目前唯一能在本地提供**多 LLM 调度 + 可验证沙箱 + 技能生态兼容**的开源方案。
+
+详细对比见 [requirements/competitive-analysis.md](requirements/competitive-analysis.md)。
 
 ---
 
-**为什么选 Aether？** 如果你担心云端 AI Agent 的隐私问题（数据被用于训练、凭证泄露、不受控的执行），Aether 是目前唯一能在本地提供完整多Agent协作 + 可验证审计日志 + 技能生态兼容的开源方案。
+**项目结构、路线图、架构图见 [requirements/](requirements/) 和 [docs/](docs/)。**

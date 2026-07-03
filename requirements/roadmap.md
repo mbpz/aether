@@ -236,9 +236,10 @@ EP-06 企业级私有部署
 
 ## 八、当前阻塞 & 不再做
 
+> **研究级项目已移至 [roadmap/long-term.md](roadmap/long-term.md)** — 包含 Wasmtime、eBPF 内核集成、Kata/Firecracker、GPU passthrough、IPFS/区块链去中心化注册表、NFT 身份、ZK 审计等。这些项目**不在交付路径中**，仅作为信任轨迹的愿景参考。
+
 **阻塞中**：
-- 🔴 **EP-01 Phase 2 Wasmtime**：等 `@bytecodealliance/wasmtime` npm 上架。每周 CI cron 跑 `npm run check:wasmtime` 探测。当前 exit code 2 = "未发布"（[ADR-002](../docs/adr/002-wasmtime-upstream-blocking.md)）。
-- 🟡 **eBPF 内核集成**：`deploy/ebpf/` 下的 BPF C + Go agent + K8s DaemonSet **已写**但未接入主进程；Phase 2 任务。
+- （研究级阻塞项见 [long-term.md](roadmap/long-term.md)）
 
 **已经放弃 / 不再做**：
 - ~~`safe-eval` 降级路径~~ — ADR-001 删除，**永不回归**

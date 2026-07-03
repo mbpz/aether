@@ -1,6 +1,10 @@
 // EP-05: MessageBus AES-256-GCM 加密层
 // 每个 Agent session 拥有独立的临时对称密钥，会话结束后销毁
 // Node.js 内置 crypto 模块，无需额外依赖
+//
+// KNOWN GAP: No dedicated test vectors for encrypt→decrypt round-trip.
+// Coverage comes indirectly via bus.test.ts (encrypted publish/consume).
+// TODO(B15): Add crypto.test.ts with known-answer vectors + authTag tamper test.
 
 import { randomUUID } from 'crypto';
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';

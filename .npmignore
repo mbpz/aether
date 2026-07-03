@@ -1,0 +1,45 @@
+# Phase 0 — npm pack hygiene (Council Verdict)
+# Only ship what a consumer needs to run Aether.
+
+# Workspace-internal sources published per-package; this root ignore only
+# applies if someone publishes the workspace root (which we don't today).
+
+# Agent workspace (internal dev state)
+.agent-workspace/
+
+# Claude config
+.claude/
+
+# Docs site (separate from package)
+docs-site/
+
+# Design docs
+Aether.md
+
+# Internal requirements
+requirements/
+
+# Test infrastructure
+tests/
+coverage/
+vitest.config.ts
+
+# Deploy configs (separate concern)
+deploy/
+
+# Node modules
+node_modules/
+
+# Local docs that ship as separate packages or GitHub wiki
+docs/
+
+# Scripts (internal dev tooling)
+scripts/
+
+# GitHub templates (not needed at runtime)
+.github/
+
+# Tarballs
+*.tgz
+as-harness-shared-*.tgz
+wasmtime-*.tgz

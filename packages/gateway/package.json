@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "description": "Aether Zero-Trust Control Plane Gateway — HTTP/WebSocket entry, Manifest validation, Vault credential injection, SOC2 audit log, eBPF firewall integration.",
   "license": "Apache-2.0",
+  "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "aether-audit": "./bin/aether-audit.mjs"
+  },
   "scripts": {
     "dev": "node --import tsx src/index.ts",
     "build": "tsc -p tsconfig.json",

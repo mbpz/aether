@@ -1,7 +1,7 @@
 {
   "name": "aether",
   "version": "0.1.0",
-  "description": "Sovereign Autonomous System — a privacy-first AI agent execution platform. Zero-trust sandbox (V8 Isolate + eBPF XDP), three-tier skill disclosure, SOC2-compliant audit log.",
+  "description": "Multi-provider local-first agent framework — run AI agents on any LLM (Claude, Gemini, Bedrock, Ollama, DeepSeek) with a V8-Isolate sandbox and three-tier skill disclosure (≥60% token reduction).",
   "license": "Apache-2.0",
   "private": true,
   "workspaces": [
@@ -20,20 +20,20 @@
     "check:ebpf": "node scripts/check-ebpf-agent.mjs",
     "gateway": "npm run dev -w packages/gateway",
     "sandbox": "npm run dev -w packages/sandbox",
-    "ui": "npm run dev -w packages/ui"
+    "ui": "npm run dev -w packages/ui",
+    "aether": "node packages/gateway/bin/aether-audit.mjs"
   },
   "keywords": [
     "ai-agents",
-    "sandbox",
-    "zero-trust",
-    "eBPF",
-    "XDP",
-    "Wasmtime",
-    "V8-Isolate",
-    "privacy",
-    "local-first",
     "agent-framework",
-    "sovereign-ai"
+    "multi-provider",
+    "local-first",
+    "sandbox",
+    "V8-Isolate",
+    "zero-trust",
+    "privacy",
+    "skill-loader",
+    "progressive-disclosure"
   ],
   "repository": {
     "type": "git",
