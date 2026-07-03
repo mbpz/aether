@@ -54,13 +54,17 @@
 |---|------|------|------|--------|---------|------|------|
 | # | 名字 | 平台 | 画像 | 关注者 | 联系方式 | 状态 | 来源 |
 |---|------|------|------|--------|---------|------|------|
-| 1 | screenpipe | GitHub | 本地 AI + 隐私 YC S26 | — | GH Discussions | ✅ identified | gh search privacy+ML |
-| 2 | locally-uncensored (Bosnian-frangipanni945) | GitHub | 本地 LLM | — | GH Issues | ✅ identified | gh search local+LLM |
-| 3 | RAGfish (rag-fish) | GitHub | 离线 RAG | — | GH Discussions | ✅ identified | gh search private+RAG |
-| 4 | _(Twitter 量化 / 独立开发者)_ | Twitter | Quant / Local LLM | | | ⬜ 搜索中 | Twitter search |
-| 5-20 | _(待填入)_ | | | | | | |
-| ... | | | | | | | |
-| 20 | | | | | | | |
+| 1 | **screenpipe** | GitHub | YC S26 本地 AI + 隐私（集成 OpenClaw/Hermes）| 19.6k★ | GH Discussions | ✅ identified | gh search |
+| 2 | **albert-ying** | GitHub | agentic-cortex — 基于 OpenClaw/Claude Code 的个人 AI OS | — | github.com/albert-ying | ✅ identified | gh search |
+| 3 | **alirezarezvani** | Twitter | HealthTech CTO, Agentic Coding, 医疗 AI | 2157 | @RezaRezvaniBln | ✅ identified | gh search API |
+| 4 | **thedotmack** (Alex Newman) | Twitter | Claude Memory, LLM 工具, 121 repos | 1782 | @Claude_Memory | ✅ identified | gh search API |
+| 5 | **mksglu** (Mert Köseoğlu) | Twitter | AI 工具开发者 | 513 | @mksglu | ✅ identified | gh search API |
+| 6 | **JesseRWeigel** | Twitter | 138 repos, 软件工程师 | 431 | @JesseRWeigel | ✅ identified | gh search API |
+| 7 | **different-ai** (Benjamin Shafii) | Twitter | Fun with LLMs, 43 repos | 457 | @benjaminshafii | ✅ identified | gh search API |
+| 8 | **hvardhan878** | GitHub | ghostwork — Screenpipe GUI + macOS 自动化 Agent | 152★ | github.com/hvardhan878 | ✅ identified | gh search |
+| 9 | **selfdriven-foundation** | Twitter | selfdriven Foundation, Agent 基础设施 | — | @selfdrivenF | ✅ identified | gh search API |
+| 10 | **affaan-m** | Twitter | AI Agent OSS meta-harness, 量化预测市场 | 8127 | @affaanmustafa | ✅ identified | gh search API |
+| 11-20 | _(待填入 — 用 §2.1 搜索关键词继续扩充)_ | | | | | ⬜ | |
 
 ---
 
@@ -84,6 +88,26 @@ Hi [名字],
 想找 5 个 beta tester，免费用 + 技术咨询，换一个 case study 授权。
 
 有兴趣聊 15 分钟？
+```
+
+**版本 A1 — Screenpipe 定制**（明确提到集成 OpenClaw/Hermes，天然适配目标）:
+
+```
+Hi screenpipe team，
+
+看到你们在做 YC S26 的本地 AI 层 — 很认同"数据不离开设备"的理念。
+
+我在做 Aether — 本地 AI Agent 框架，有一个 screenpipe 刚好需要的东西：
+可验证的执行。我们做了 V8 沙箱 + HMAC-SHA256 审计链 + 12 个动态 exploit
+测试（全阻断），可以证明 Agent 做了什么/没做什么。
+
+你们文档提到集成 OpenClaw/Hermes。Aether 可以作为底层执行层，
+给这些 Agent 提供可验证的"信任根"。
+
+可以聊 15 分钟看集成是否互利？
+
+github.com/mbpz/aether
+red-team-report.md 见 /docs
 ```
 
 **版本 B — 有共同关注/互动过**:
@@ -160,6 +184,62 @@ Hi [名字],
 
 [你的名字]
 Aether 维护者
+```
+
+### 3.3 高价值目标定制消息（可直接发送）
+
+**目标 #1 — screenpipe** (用上面的 版本 A1):
+
+```
+Hi screenpipe team，
+
+看到你们在做 YC S26 的本地 AI 层 — 很认同"数据不离开设备"的理念。
+
+我在做 Aether — 本地 AI Agent 框架，有一个 screenpipe 刚好需要的东西：
+可验证的执行。我们做了 V8 沙箱 + HMAC-SHA256 审计链 + 12 个动态 exploit
+测试（全阻断），可以证明 Agent 做了什么/没做什么。
+
+你们文档提到集成 OpenClaw/Hermes。Aether 可以作为底层执行层，
+给这些 Agent 提供可验证的"信任根"。
+
+可以聊 15 分钟看集成是否互利？
+
+github.com/mbpz/aether
+red-team-report.md 见 /docs
+```
+
+**目标 #2 — albert-ying** (agentic-cortex, 明确用 OpenClaw/Claude Code):
+
+```
+Hi Albert，
+
+看到你的 agentic-cortex 项目 — "个人 AI OS 基于 OpenClaw/Claude Code"，
+这个方向很对。
+
+我在做 Aether — 给这些 Agent 提供一个可验证的执行层：
+- V8 沙箱隔离（子进程/模块注入全阻断，动态测试证明）
+- HMAC-SHA256 审计链（每个 Agent 操作都可验证没被篡改）
+- 红队报告: github.com/mbpz/aether/blob/main/docs/red-team-report.md
+
+如果你在考虑如何让 agentic-cortex 的执行层更安全/可审计，
+我们可以聊聊 Aether 作为底层替代方案。15 分钟？
+```
+
+**目标 #3 — alirezarezvani** (HealthTech + Agentic Coding):
+
+```
+Hi Alireza，
+
+看到你在 HealthTech 做 Agentic Coding — 医疗场景对"可审计的 AI 执行"
+有硬性要求（HIPAA audit log 等）。
+
+Aether 可以作为合规底层：
+- 每个 Agent 操作都有 HMAC-SHA256 审计链
+- `aether-audit export --format=soc2` 直接输出 SOC2 CC1-9 控制映射
+- V8 沙箱阻止数据出域
+
+如果你有医疗数据处理场景需要"可证明的 AI 执行"，可以聊聊。15 分钟？
+github.com/mbpz/aether
 ```
 
 ---
