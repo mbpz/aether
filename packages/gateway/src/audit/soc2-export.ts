@@ -9,6 +9,8 @@ interface AuditRecord {
   id: string;
   timestamp: string;
   sequence: number;
+  previousHash: string;
+  hash: string;
   action: string;
   category: string;
   actor: { type: string; id: string; label?: string };
@@ -103,7 +105,7 @@ export function buildSOC2Export(opts: {
     entriesVerified++;
   }
 
-  const headHash = allEntries.length > 0 ? allEntries[allEntries.length - 1].hash : 'GENESIS';
+  const headHash: string = allEntries.length > 0 ? String(allEntries[allEntries.length - 1].hash) : 'GENESIS';
   const valid = errors.length === 0;
 
   // Control coverage.

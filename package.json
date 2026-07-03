@@ -21,7 +21,7 @@
     "gateway": "npm run dev -w packages/gateway",
     "sandbox": "npm run dev -w packages/sandbox",
     "ui": "npm run dev -w packages/ui",
-    "aether": "node packages/gateway/bin/aether-audit.mjs"
+    "aether": "npx tsx packages/gateway/bin/aether-audit.mjs"
   },
   "keywords": [
     "ai-agents",

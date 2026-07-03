@@ -9,6 +9,7 @@
  *   aether-audit verify                                verify hash-chain integrity (SOC2)
  *   aether-audit stats                                per-category counts
  *   aether-audit export <path> [--format=soc2]        export a single-file verifiable artifact
+ *   aether-audit trust-score <skill-path>            scan a SKILL.md and output trust score
  *
  *   --format=soc2  produces a compliance artifact with SOC2 CC1-CC9 control
  *                   mapping, control coverage summary, and signature manifest.
@@ -24,6 +25,8 @@ import { createHash } from 'crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const GATEWAY_SRC = join(__dirname, '..', 'src');
+const MONOREPO_ROOT = join(__dirname, '..', '..', '..');  // packages/gateway/bin/ → repo root
+const SKILL_LOADER_SRC = join(MONOREPO_ROOT, 'packages', 'skill-loader', 'src');
 
 const { AuditLogger } = await import(`${GATEWAY_SRC}/audit/logger.ts`);
 
@@ -216,6 +219,48 @@ async function cmdExport(opts) {
   console.log(`  Verify with: aether-audit verify`);
 }
 
+async function cmdTrustScore(opts) {
+  const [skillPath] = opts.positional;
+  if (!skillPath) {
+    console.error('Usage: aether-audit trust-score <skill-path>');
+    process.exit(2);
+  }
+
+  // Lazy-import so the CLI starts fast even when skill-loader is not installed.
+  const { SkillParser } = await import(`${SKILL_LOADER_SRC}/parser/skill-parser.ts`);
+  const { TrustScoreScanner } = await import(`${GATEWAY_SRC}/audit/trust-score.ts`);
+
+  const scanner = new TrustScoreScanner({ parser: new SkillParser() });
+  const report = scanner.scanFile(skillPath);
+
+  const scoreBar = _bar(report.trustScore, 20);
+  const icon = report.allowed ? '✅' : '🚫';
+  console.log(`${icon} ${report.skillName} — trust score: ${report.trustScore}/100 (threshold=${report.threshold})  ${scoreBar}`);
+  console.log(`  source=${report.source}  path=${report.skillPath}`);
+  console.log(`  summary: network=${report.summary.networkAccess} fs_write=${report.summary.filesystemWrite} fs_read=${report.summary.filesystemRead} exec=${report.summary.execDetected} eval=${report.summary.evalDetected}`);
+
+  if (report.findings.length > 0) {
+    console.log(`\n  Findings (${report.findings.length}):`);
+    // Show critical first, then high, then rest.
+    const ordered = [...report.findings].sort((a, b) => _severityRank(b.severity) - _severityRank(a.severity));
+    for (const f of ordered) {
+      const sev = f.severity.padEnd(8);
+      console.log(`    ${sev} ${f.type.padEnd(22)} ${f.detail}${f.line ? `  [${f.line}]` : ''}`);
+    }
+  }
+  console.log('');
+  if (!report.allowed) process.exit(3);  // non-zero exit code so CI can gate
+}
+
+function _bar(score, width) {
+  const filled = Math.round((score / 100) * width);
+  return '█'.repeat(filled) + '░'.repeat(width - filled);
+}
+
+function _severityRank(s) {
+  return ({ critical: 4, high: 3, medium: 2, low: 1 })[s] || 0;
+}
+
 function readKeyFromEnv() {
   const f = process.env.AUDIT_SIGNING_KEY_FILE;
   if (f) {
@@ -234,6 +279,7 @@ switch (opts.sub) {
   case 'verify':await cmdVerify(); break;
   case 'stats': await cmdStats(); break;
   case 'export':await cmdExport(opts); break;
+  case 'trust-score': await cmdTrustScore(opts); break;
   case '--help':
   case '-h':
   case undefined:
