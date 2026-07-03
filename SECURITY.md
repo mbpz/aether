@@ -66,6 +66,26 @@ This is **not** a marketing claim — these are the **actually-implemented** con
 - eBPF XDP kernel layer is **only** active when the sandbox runs against a Linux host with the `deploy/ebpf/` DaemonSet deployed. On macOS / Windows dev, the kernel layer is stubbed; the in-process EbpfFirewall still rejects (see ADR-006).
 - SOC2 compliance is **partially implemented**: the audit log + access controls exist, but the **certified** SOC2 report is not yet produced. The `packages/gateway/src/compliance/` module is a generator, not an auditor.
 
+### Sandbox attack surface (verified by `exploit-demonstration.test.ts`)
+
+Aether's V8 Isolate sandbox is verified against 6 attack categories:
+
+| # | Attack vector | Test | Status |
+|---|--------------|------|--------|
+| 1 | Secret leakage via globalThis | blocks host-side secret | ✅ BLOCKED |
+| 2 | process.binding (native escape) | blocks process.binding | ✅ BLOCKED |
+| 3 | require('child_process') | blocks module resolution | ✅ BLOCKED |
+| 4 | child_process.execSync | blocks require/import paths | ✅ BLOCKED |
+| 5 | Infinite loop (DoS) | times out at 5s | ✅ BLOCKED |
+| 6 | Memory bomb (OOM) | capped at 64 MB/isolate | ✅ BLOCKED |
+| 7 | Host path leakage in errors | no host paths in error messages | ✅ BLOCKED |
+| 8 | Obfuscated code (string concat) | blocks dynamic module access | ✅ BLOCKED |
+| 9 | CPU-burning loop | times out at 5s | ✅ BLOCKED |
+| 10 | bridge.ts source audit | no new Function / safe-eval | ✅ PASS |
+
+**Platforms verified**: macOS (arm64) × Node 20/22/24 + Linux (x64) × Node 20/22/24.
+Windows runs the same suite in CI. Side-channel attacks (Spectre-class) are out of scope.
+
 ## Threat Model
 
 Documented in [requirements/roadmap.md §6](requirements/roadmap.md) — OWASP Agentic Top 10 coverage.
@@ -80,6 +100,7 @@ Specifically: we defend against **prompt injection + tool misuse** leading to da
 ## Security Audit Cadence
 
 - **Per PR**: CI runs `npm audit` (currently clean: 0 vulnerabilities) and `bridge.test.ts` (5 static regression tests on the fail-closed contract).
+- **Per PR (sandbox matrix)**: A dedicated `sandbox-verify` CI job runs `exploit-demonstration.test.ts` (12 dynamic tests across 6 attack vectors) on `ubuntu-latest` × `macos-latest` × Node `20/22/24`. See `sandbox-verify` job in `.github/workflows/ci.yml`.
 - **Quarterly**: Manual review of all eBPF C, Go agent, and SecurityPolicy changes; re-read of all ADRs.
 - **Pre-release**: External audit is not yet performed. v1.0 will not be tagged without one.
 

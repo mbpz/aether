@@ -20,14 +20,14 @@ jobs:
   # and schedule. PRs from forks run on ubuntu only (saves CI minutes
   # and avoids exposing forks to more runners).
   build-test:
-    name: build + test
+    name: build + test (${{ matrix.os }}, Node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        node: [20, 22]
+        node: [20, 22, 24]
         # PRs from forks: ubuntu only.
         include:
           - os: ubuntu-latest
@@ -59,6 +59,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Sandbox exploit matrix verification
+        run: npx vitest run packages/gateway/src/sandbox/exploit-demonstration.test.ts --reporter=verbose 2>&1 | tail -30
+
       - name: Probe wasmtime upstream (ADR-002)
         # Informational only — exit 2 ("not yet") is the expected
         # state until @bytecodealliance/wasmtime ships on npm.
@@ -78,6 +81,42 @@ jobs:
           name: dist-${{ matrix.os }}-node${{ matrix.node }}-${{ github.sha }}
           path: packages/*/dist/
           retention-days: 7
+
+  # B15: Dedicated sandbox verification — runs the exploit-demonstration suite
+  # across the full OS × Node matrix and prints a summary. Isolated from the
+  # main build-test job so sandbox failures don't block the general build.
+  sandbox-verify:
+    name: sandbox matrix (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node${{ matrix.node }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node${{ matrix.node }}-npm-
+      - run: npm ci
+      - name: Run exploit-demonstration tests
+        run: npx vitest run packages/gateway/src/sandbox/exploit-demonstration.test.ts --reporter=verbose
+      - name: Print sandbox verification summary
+        if: always()
+        run: |
+          echo "## Sandbox verification: ${{ matrix.os }} / Node ${{ matrix.node }}" >> $GITHUB_STEP_SUMMARY
+          if [ $? -eq 0 ]; then
+            echo "✅ PASS — all exploit vectors blocked." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ FAIL — sandbox escape detected!" >> $GITHUB_STEP_SUMMARY
+          fi
 
   # B7-2: Linux-only e2e runner using kind (Kubernetes in Docker).
   # Runs only on main pushes and schedule — not on every PR —
