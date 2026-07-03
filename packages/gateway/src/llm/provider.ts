@@ -49,21 +49,40 @@ export class LLMError extends Error {
 
 // ── LLM Provider ──────────────────────────────────────────────────────────────
 
+// Forward-declare to avoid circular imports at module load time.
+type AuditLoggerLike = {
+  log(entry: {
+    action: string;
+    category: string;
+    actor: { type: string; id: string };
+    outcome: string;
+    detail?: string;
+    metadata?: Record<string, unknown>;
+  }): string;
+};
+
 export class LLMProvider {
   private config: LLMProviderConfig;
+  private audit: AuditLoggerLike | null = null;
 
-  constructor(config: LLMProviderConfig) {
+  constructor(config: LLMProviderConfig, audit?: AuditLoggerLike) {
     this.config = {
       timeoutMs: 60_000,
       temperature: 0.7,
       maxTokens: 4096,
       ...config,
     };
+    this.audit = audit ?? null;
   }
 
   get model(): string { return this.config.model; }
   get baseUrl(): string | undefined { return this.config.baseUrl; }
   get type(): string { return this.config.type; }
+
+  /** Wire an audit logger after construction (for circular-dependency cases). */
+  setAuditLogger(audit: AuditLoggerLike | null): void {
+    this.audit = audit;
+  }
 
   /**
    * 发送 chat completion 请求
@@ -77,24 +96,62 @@ export class LLMProvider {
     } = {},
   ): Promise<LLMResponse> {
     // Dispatch to the right request shape / response parser per provider.
-    // The OpenAI-compatible family (openai / ollama / openrouter / custom
-    // / deepseek) shares /chat/completions. Anthropic, Gemini, and
-    // Bedrock have their own protocols. Adding a new provider = adding
-    // one branch here + one preset in types.ts.
-    switch (this.config.type) {
+    const t0 = Date.now();
+    try {
+      let result: LLMResponse;
+      switch (this.config.type) {
       case 'openai':
       case 'ollama':
       case 'openrouter':
       case 'custom':
-        return this._chatOpenAICompat(messages, opts);
+        result = await this._chatOpenAICompat(messages, opts);
+        break;
       case 'anthropic':
-        return this._chatAnthropic(messages, opts);
+        result = await this._chatAnthropic(messages, opts);
+        break;
       case 'gemini':
-        return this._chatGemini(messages, opts);
+        result = await this._chatGemini(messages, opts);
+        break;
       case 'bedrock':
-        return this._chatBedrock(messages, opts);
+        result = await this._chatBedrock(messages, opts);
+        break;
       default:
         throw new LLMError(`Unknown provider type: ${(this.config as { type: string }).type}`, 'INVALID_CONFIG');
+      }
+
+      // Auto-record successful LLM calls (B15 — lifecycle audit).
+      this._auditLog('llm_call', 'data_access', 'success',
+        `provider=${this.config.type} model=${this.config.model} tokens=${result.usage?.total_tokens ?? 0}`,
+        {
+          type: this.config.type, model: this.config.model,
+          durationMs: Date.now() - t0,
+          promptTokens: result.usage?.prompt_tokens,
+          completionTokens: result.usage?.completion_tokens,
+          messageCount: messages.length, toolCount: opts.tools?.length ?? 0,
+        });
+      return result;
+    } catch (err) {
+      this._auditLog('llm_call', 'data_access', 'failure',
+        `provider=${this.config.type} error=${err instanceof Error ? err.message : String(err)}`,
+        { type: this.config.type, model: this.config.model, durationMs: Date.now() - t0 });
+      throw err;
+    }
+  }
+
+  /** Fire-and-forget audit. Never throws, never blocks the caller. */
+  private _auditLog(
+    action: string, category: string, outcome: string,
+    detail: string, metadata: Record<string, unknown>,
+  ): void {
+    if (!this.audit) return;
+    try {
+      this.audit.log({
+        action, category,
+        actor: { type: 'system', id: 'llm-provider' },
+        outcome, detail: detail.slice(0, 500), metadata,
+      });
+    } catch {
+      // Audit failure is silent — logging must never break the hot path.
     }
   }
 

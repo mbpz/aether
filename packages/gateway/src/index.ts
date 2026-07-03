@@ -44,7 +44,7 @@ export const config = {
 
 async function main() {
   const audit = new AuditLogger();
-  const manifest = new ManifestEngine();
+  const manifest = new ManifestEngine(audit);
   const vault = new VaultInjector();
   const taskQueue = new TaskQueue();
   // EP-01 / ADR-006: 构造 in-process EbpfFirewall 传给 SandboxBridge。
@@ -70,8 +70,9 @@ async function main() {
   // EP-05: Team Orchestrator（依赖 registry + bus + sandboxManager）
   const teamOrchestrator = new TeamOrchestrator(agentRegistry, messageBus, agentSandboxManager);
 
-  // EP-07: LLM Provider
+  // EP-07: LLM Provider (wired with audit for lifecycle logging)
   const llmManager = new LLMManager();
+  llmManager.setAuditLogger(audit);
   const llmFromEnv = llmManager.initFromEnv();
   if (llmFromEnv) {
     console.log('[aether:gateway] 🤖 LLM Provider loaded from environment variables');

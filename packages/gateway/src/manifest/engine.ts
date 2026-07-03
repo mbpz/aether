@@ -5,6 +5,18 @@ import { readFileSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import yaml from 'js-yaml';
 
+// Forward-declare to avoid circular import — AuditLogger is optional at runtime.
+type AuditLoggerLike = {
+  log(entry: {
+    action: string;
+    category: string;
+    actor: { type: string; id: string };
+    outcome: string;
+    detail?: string;
+    metadata?: Record<string, unknown>;
+  }): string;
+};
+
 export interface PermissionManifest {
   name: string;
   version: string;
@@ -126,6 +138,7 @@ function ipv4InCidr(ip: string, cidr: string): boolean {
 
 export class ManifestEngine {
   private manifests: Map<string, PermissionManifest> = new Map();
+  private audit: AuditLoggerLike | null = null;
   private defaultManifest: PermissionManifest = {
     name: 'default-restrictive',
     version: '1.0',
@@ -144,8 +157,14 @@ export class ManifestEngine {
     },
   };
 
-  constructor() {
+  constructor(audit?: AuditLoggerLike) {
+    this.audit = audit ?? null;
     this.loadManifestsFromDir();
+  }
+
+  /** Wire an audit logger after construction (for circular-dependency cases). */
+  setAuditLogger(audit: AuditLoggerLike | null): void {
+    this.audit = audit;
   }
 
   private loadManifestsFromDir() {
@@ -184,34 +203,59 @@ export class ManifestEngine {
       ? (this.manifests.get(request.manifestName) ?? this.defaultManifest)
       : this.defaultManifest;
 
+    let result: ManifestValidationResult;
+
     // 检查操作类型
     if (request.operation === 'exec' && !manifest.operations?.exec) {
-      return { allowed: false, reason: 'exec operations are not permitted by manifest', manifest };
-    }
-
-    if (request.operation === 'network') {
+      result = { allowed: false, reason: 'exec operations are not permitted by manifest', manifest };
+    } else if (request.operation === 'network') {
       if (!manifest.operations?.network) {
-        return { allowed: false, reason: 'network operations are not permitted by manifest', manifest };
-      }
-      // 检查目标主机
-      if (request.target && manifest.network?.blockExternal) {
+        result = { allowed: false, reason: 'network operations are not permitted by manifest', manifest };
+      } else if (request.target && manifest.network?.blockExternal) {
         const allowedHosts = manifest.network.allowedHosts ?? [];
         const isAllowed = hostMatchesAllowlist(request.target, allowedHosts);
         if (!isAllowed) {
-          return {
+          result = {
             allowed: false,
             reason: `network target ${request.target} is not in allowedHosts`,
             manifest,
           };
+        } else {
+          result = { allowed: true, manifest };
         }
+      } else {
+        result = { allowed: true, manifest };
+      }
+    } else if (request.operation === 'filesystem' && !manifest.operations?.filesystem) {
+      result = { allowed: false, reason: 'filesystem operations are not permitted by manifest', manifest };
+    } else {
+      result = { allowed: true, manifest };
+    }
+
+    // Auto-record authorization decision (B15 — lifecycle audit).
+    // Best-effort: never throw from the audit path, and never block the
+    // validation decision on audit availability.
+    if (this.audit) {
+      try {
+        this.audit.log({
+          action: result.allowed ? 'manifest_allow' : 'manifest_reject',
+          category: 'authorization',
+          actor: { type: 'system', id: 'manifest-engine' },
+          outcome: result.allowed ? 'success' : 'failure',
+          detail: `operation=${request.operation} manifest=${manifest.name} allowed=${result.allowed}`,
+          metadata: {
+            operation: request.operation,
+            target: request.target,
+            manifestName: manifest.name,
+            reason: result.reason ?? null,
+          },
+        });
+      } catch {
+        // Audit failure must not break validation.
       }
     }
 
-    if (request.operation === 'filesystem' && !manifest.operations?.filesystem) {
-      return { allowed: false, reason: 'filesystem operations are not permitted by manifest', manifest };
-    }
-
-    return { allowed: true, manifest };
+    return result;
   }
 
   /**

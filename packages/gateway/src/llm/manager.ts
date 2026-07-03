@@ -7,9 +7,21 @@ import { PROVIDER_PRESETS } from './types.js';
 
 export { LLMError };
 
+type AuditLoggerLike = {
+  log(entry: {
+    action: string;
+    category: string;
+    actor: { type: string; id: string };
+    outcome: string;
+    detail?: string;
+    metadata?: Record<string, unknown>;
+  }): string;
+};
+
 export class LLMManager {
   private _provider: LLMProvider | null = null;
   private _config: LLMProviderConfig | null = null;
+  private _audit: AuditLoggerLike | null = null;
 
   /** 是否已配置 */
   get isConfigured(): boolean {
@@ -21,6 +33,12 @@ export class LLMManager {
     return this._provider;
   }
 
+  /** Wire an audit logger; new providers created via configure() will auto-log. */
+  setAuditLogger(audit: AuditLoggerLike | null): void {
+    this._audit = audit;
+    if (this._provider) this._provider.setAuditLogger(audit);
+  }
+
   /**
    * 应用配置，创建 provider（不立即连接）
    */
@@ -29,7 +47,7 @@ export class LLMManager {
     const preset = PROVIDER_PRESETS[config.type] ?? {};
     const merged: LLMProviderConfig = { ...preset, ...config };
     this._config = merged;
-    this._provider = new LLMProvider(merged);
+    this._provider = new LLMProvider(merged, this._audit ?? undefined);
     console.log(
       `[aether:llm-manager] ✅ Configured: ${merged.type} ${merged.model} @ ${merged.baseUrl}`,
     );
