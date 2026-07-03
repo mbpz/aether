@@ -12,7 +12,11 @@
 
 ---
 
-> **Trust as trajectory.** Local V8 sandbox Day 0. Route to any provider Day 1. [Audit the trust boundary](docs/compositions.md) as it graduates Day 2 — `aether-audit verify` proves the chain hasn't been tampered with.
+> **Trust as trajectory.** Local V8 sandbox Day 0. Route to any provider Day 1. [Audit the trust boundary](docs/compositions.md) as it grades Day 2 — `aether-audit verify` proves the chain hasn't been tampered with.
+
+---
+
+> **案例研究 (Case Study)**: [维护者如何在生产环境中使用 Aether 进行自身开发](docs/case-study-dogfood.md) · 575 tests · 12 exploit vectors · 0 escapes · SOC2 CC1-9 全覆盖
 
 ---
 

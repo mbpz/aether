@@ -77,7 +77,7 @@
 | P0-1 | 审计链跨文件 hash 续接 | [#1](https://github.com/mbpz/aether/issues/1) | ❌ 每个文件从 GENESIS 开始 | ✅ 跨文件连续验证 | 写入 3 天日志，全链 verify 通过 |
 | P0-2 | Agent 生命周期事件自动记录 | [#2](https://github.com/mbpz/aether/issues/2) | ❌ 仅手动 log() | ✅ 沙箱执行、LLM 调用、权限决策自动记录 | 不调用 log() 也能生成完整审计 |
 | P0-3 | 沙箱全平台验证 | [#3](https://github.com/mbpz/aether/issues/3) | ⚠️ macOS 仅 Node 20 | ✅ Node 20/22/24 × macOS/Linux/Windows 验证矩阵 | CI 全绿 |
-| P0-4 | 命名垂直试点落地 | [#4](https://github.com/mbpz/aether/issues/4) | ❌ 无 | ✅ 金融/医疗/法律各至少 1 个 | 公开背皮书或案例研究 |
+| P0-4 | 内部 dogfooding 案例 | [#4](https://github.com/mbpz/aether/issues/4) | ⚠️ 待验证 | ✅ 维护者自身生产使用 + 公开 case study | case-study-dogfood.md 上线 + README 引用 |
 
 ### P1 — 竞争优势放大（做了就显著拉开差距）
 
