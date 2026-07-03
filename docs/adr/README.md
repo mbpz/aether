@@ -24,3 +24,11 @@
 - 一条 ADR 只解决一个决策，长度建议 ≤ 1 页
 - 拒绝的备选必须列出，含拒绝理由
 - 每条 ADR 必须给出**可机器执行**的"验证"命令
+
+## Related RFCs
+
+| Doc | Purpose |
+|-----|---------|
+| [threat-model.md](../threat-model.md) | Architecture-level threat model, OWASP Agentic Top 10 mapping, SOC2 control coverage, verification commands |
+| [red-team-report.md](../red-team-report.md) | Public red-team report: 10 active attack vectors tested against the V8 sandbox, all blocked |
+| [compositions.md](../compositions.md) | Multi-agent composition guide (researcher + executor pattern) |

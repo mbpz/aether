@@ -66,6 +66,12 @@ This is **not** a marketing claim — these are the **actually-implemented** con
 - eBPF XDP kernel layer is **only** active when the sandbox runs against a Linux host with the `deploy/ebpf/` DaemonSet deployed. On macOS / Windows dev, the kernel layer is stubbed; the in-process EbpfFirewall still rejects (see ADR-006).
 - SOC2 compliance is **partially implemented**: the audit log + access controls exist, but the **certified** SOC2 report is not yet produced. The `packages/gateway/src/compliance/` module is a generator, not an auditor.
 
+### RFC documents
+
+- [Threat Model](docs/threat-model.md) — architecture-level threat model with OWASP Agentic Top 10 mapping, SOC2 control coverage, and verification commands.
+- [Red Team Report](docs/red-team-report.md) — public red-team report: 10 active attack vectors, all blocked with reproducible test code.
+- [Multi-Agent Compositions](docs/compositions.md) — researcher + executor composition guide.
+
 ### Sandbox attack surface (verified by `exploit-demonstration.test.ts`)
 
 Aether's V8 Isolate sandbox is verified against 6 attack categories:
