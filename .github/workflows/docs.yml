@@ -54,7 +54,10 @@ jobs:
 
       - name: Install docs-site deps
         working-directory: docs-site
-        run: npm ci
+        run: |
+          # Prefer npm ci when a lock file exists; fall back to install
+          # for fresh checkouts that don't commit package-lock.json.
+          test -f package-lock.json && npm ci || npm install
 
       - name: Build
         working-directory: docs-site
