@@ -132,6 +132,71 @@ describe('AuditLogger', () => {
     });
   });
 
+  describe('cross-file hash chain (B15 fix)', () => {
+    it('continues the hash chain across multiple .jsonl files', () => {
+      // Day 1: write 3 entries
+      const day1 = new Date('2026-07-01T10:00:00Z');
+      const path1 = join(workdir, '2026-07-01.jsonl');
+
+      // Manually construct a valid day-1 file with 3 chained records
+      // We need the real signing key to compute HMACs, so we go through the logger
+      // first then rename the file.
+      const logger = makeLogger(workdir);
+      logger.log({ action: 'd1a', category: 'system', actor: { type: 'system', id: 't' }, outcome: 'success' });
+      logger.log({ action: 'd1b', category: 'system', actor: { type: 'system', id: 't' }, outcome: 'success' });
+      logger.log({ action: 'd1c', category: 'system', actor: { type: 'system', id: 't' }, outcome: 'success' });
+      logger.forceFlush();
+
+      // Rename today's file to simulate day 1
+      const todayPath = logger.todayLogPath();
+      const { renameSync } = require('fs');
+      renameSync(todayPath, path1);
+
+      // Day 2: new logger picks up the chain from day 1
+      const logger2 = makeLogger(workdir);
+      // The first entry of day 2 should chain off the last entry of day 1
+      logger2.log({ action: 'd2a', category: 'system', actor: { type: 'system', id: 't' }, outcome: 'success' });
+      logger2.log({ action: 'd2b', category: 'system', actor: { type: 'system', id: 't' }, outcome: 'success' });
+      logger2.forceFlush();
+
+      // Verify the full chain across both files
+      const result = logger2.verifyLogIntegrity();
+      expect(result.valid).toBe(true);
+      expect(result.entriesVerified).toBe(5); // 3 from day1 + 2 from day2
+
+      // The first entry of day 2 must reference the last entry of day 1
+      const files = logger2.logFilePaths();
+      expect(files.length).toBe(2);
+      const day2Content = readFileSync(files[1], 'utf-8').split('\n').filter(Boolean);
+      const day2First = JSON.parse(day2Content[0]);
+      const day1Content = readFileSync(files[0], 'utf-8').split('\n').filter(Boolean);
+      const day1Last = JSON.parse(day1Content[day1Content.length - 1]);
+      expect(day2First.previousHash).toBe(day1Last.hash);
+    });
+
+    it('detects tampering in a previous file via cross-file verification', () => {
+      const path1 = join(workdir, '2026-07-01.jsonl');
+      const logger = makeLogger(workdir);
+      logger.log({ action: 'ok', category: 'system', actor: { type: 'system', id: 't' }, outcome: 'success' });
+      logger.forceFlush();
+      const { renameSync } = require('fs');
+      renameSync(logger.todayLogPath(), path1);
+
+      const logger2 = makeLogger(workdir);
+      logger2.log({ action: 'day2', category: 'system', actor: { type: 'system', id: 't' }, outcome: 'success' });
+      logger2.forceFlush();
+
+      // Tamper with day 1
+      const content = readFileSync(path1, 'utf-8').split('\n').filter(Boolean);
+      const rec = JSON.parse(content[0]);
+      rec.action = 'TAMPERED';
+      writeFileSync(path1, JSON.stringify(rec) + '\n');
+
+      const result = logger2.verifyLogIntegrity();
+      expect(result.valid).toBe(false);
+    });
+  });
+
   describe('queryByTimeRange + recent() + statsByCategory', () => {
     it('recent() returns up to N most recent records', () => {
       const logger = makeLogger(workdir);

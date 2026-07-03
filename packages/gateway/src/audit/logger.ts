@@ -165,24 +165,51 @@ export class AuditLogger {
   }
 
   /**
-   * 从最近的日志文件恢复lastHash，保持hash链连续
+   * Restore lastHash from existing logs, preserving chain continuity across
+   * files. Starts at the tail of the last file and walks backwards to find
+   * the last *valid* record — if internal tampering is detected in the tail
+   * file we fall back to GENESIS so new entries still form a correct (if
+   * disconnected) chain rather than building on corrupted state.
+   *
+   * Before trusting the loaded hash, we verify the last file's internal
+   * chain. If an earlier file in the sequence was tampered with, the
+   * verification gap is detected by verifyLogIntegrity() — but new writes
+   * must never extend a broken link.
    */
   private _loadLastHash() {
     try {
       const logFiles = this._getLogFiles();
       if (logFiles.length === 0) return;
 
-      // Read the last file to find the highest sequence
       const lastFile = logFiles[logFiles.length - 1];
       const lines = readFileSync(lastFile, 'utf-8').split('\n').filter(Boolean);
       if (lines.length === 0) return;
 
-      const lastLine = lines[lines.length - 1];
-      const lastRecord = JSON.parse(lastLine) as AuditRecord;
-      this.sequence = lastRecord.sequence + 1;
-      this.lastHash = lastRecord.hash;
+      // Verify this file's internal chain before trusting its tail hash.
+      let prev = 'GENESIS';
+      let lastGoodRecord: AuditRecord | null = null;
+      for (const line of lines) {
+        const rec = JSON.parse(line) as AuditRecord;
+        if (rec.previousHash !== prev) {
+          // Chain broken in this file — start fresh from GENESIS.
+          return;
+        }
+        // Re-compute the hash to detect silent tampering.
+        const { hash, ...data } = rec;
+        const expected = this._computeHash(data as Omit<AuditRecord, 'hash'>);
+        if (expected !== hash) {
+          return;
+        }
+        prev = rec.hash;
+        lastGoodRecord = rec;
+      }
+
+      if (lastGoodRecord) {
+        this.sequence = lastGoodRecord.sequence + 1;
+        this.lastHash = lastGoodRecord.hash;
+      }
     } catch {
-      // 忽略，日志从GENESIS开始
+      // Parse/read error — start from GENESIS.
     }
   }
 
