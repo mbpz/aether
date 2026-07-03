@@ -292,3 +292,4 @@ packages/gateway/
 ---
 
 *本文件由 Council of High Intelligence 裁决生成，需每周 review 一次。*
+# CI fix verification
